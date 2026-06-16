@@ -1,6 +1,6 @@
 {
   "build": {
-    "contentHash": "857d082c48b6bf080070e1f5a4972adcfb596a658d2fdcea17546f3ef7c7721c",
+    "contentHash": "b3088b594fffe7af47ab53d78b9d2c1b500f676dbebb9eab37348e0ab101c816",
     "indexerId": "spec-spine",
     "indexerVersion": "0.4.0",
     "repoRoot": "."
@@ -449,6 +449,10 @@
             "source": "spec-edge"
           },
           {
+            "path": ".github/workflows/determinism.yml",
+            "source": "spec-edge"
+          },
+          {
             "path": ".github/workflows/release.yml",
             "source": "spec-edge"
           },
@@ -501,6 +505,19 @@
             "unit": {
               "kind": "file",
               "path": ".github/workflows/ci.yml"
+            }
+          },
+          {
+            "locations": [
+              {
+                "file": ".github/workflows/determinism.yml"
+              }
+            ],
+            "ownership": true,
+            "sourceField": "establishes",
+            "unit": {
+              "kind": "file",
+              "path": ".github/workflows/determinism.yml"
             }
           },
           {
