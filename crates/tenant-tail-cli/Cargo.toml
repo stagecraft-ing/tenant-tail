@@ -1,0 +1,25 @@
+[package]
+name = "tenant-tail-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "tenant-tail: the verify-only CLI (verify-certificate, verify-provenance)."
+
+[[bin]]
+name = "tenant-tail"
+path = "src/main.rs"
+
+[dependencies]
+tenant-tail-core.workspace = true
+tenant-tail-types.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.tenant-tail]
+spec = "000-tenant-tail-bootstrap"

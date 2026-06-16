@@ -1,0 +1,64 @@
+name: ci
+
+# Pull-request + main CI (SKELETON). Two jobs:
+#   test     - cargo fmt/clippy/build/test over the workspace.
+#   dogfood  - run the pinned spec-spine library over THIS repo's specs/ corpus
+#              (compile, lint --fail-on-warn, index check, couple), the same
+#              self-governance gates spec-spine and OAP run on themselves.
+#
+# The dogfood job requires spec-spine pinned as a devDependency in a root
+# package.json (`npm i -D spec-spine@<version>`); the tenant-tail worker adds
+# that pin when it wires governance. Until then the dogfood job is a skeleton.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Test
+        run: cargo test --workspace --locked
+
+  dogfood:
+    name: dogfood (spec-spine over this corpus)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Requires a root package.json pinning spec-spine (worker adds it):
+      #   npm ci
+      - name: Install pinned governance toolchain
+        run: npm ci
+      - name: Compile registry (validation gate)
+        run: npx --no-install spec-spine compile
+      - name: Codebase index freshness (committed artifacts must be current)
+        run: npx --no-install spec-spine index check
+      - name: Conformance lint (fail on warn)
+        run: npx --no-install spec-spine lint --fail-on-warn
+      - name: Coupling gate (spec/code drift)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          printf '%s' "${PR_BODY:-}" > /tmp/pr-body.txt
+          npx --no-install spec-spine couple --base "$BASE" --head HEAD --pr-body /tmp/pr-body.txt
