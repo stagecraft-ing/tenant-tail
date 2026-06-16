@@ -41,11 +41,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the coupling gate can diff the PR base SHA against
+          # HEAD; the default shallow clone (fetch-depth 1) leaves the base
+          # commit absent and `git diff base...HEAD` fails.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # Requires a root package.json pinning spec-spine (worker adds it):
-      #   npm ci
+      # Root package.json pins spec-spine as a devDependency; npm ci installs it
+      # from the committed package-lock.json (sha512-locked, offline-capable).
       - name: Install pinned governance toolchain
         run: npm ci
       - name: Compile registry (validation gate)
