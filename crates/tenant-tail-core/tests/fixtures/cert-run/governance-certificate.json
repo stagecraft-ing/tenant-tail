@@ -1,0 +1,74 @@
+{
+  "certificateVersion": "1.5.0",
+  "pipelineRunId": "cert-run",
+  "timestamp": "2026-06-16T20:04:09.157221Z",
+  "status": "complete",
+  "intent": {
+    "requirementsHash": "62bde87a2f3cb63a0a3f819fdc1050a426ef9fe450e68130eea2775973b0d36b"
+  },
+  "buildSpec": {
+    "hash": "a8f4327c3131c1b8872f412bab322862e3c0ee327a85d6166cef1c25ab886020"
+  },
+  "stages": [
+    {
+      "stageId": "s0-preflight",
+      "status": "passed",
+      "artifactHashes": {
+        "preflight.txt": "7922c662fd96d7d09b930f0feba93fa2e9a463e992c630638f78b03287d6a24c"
+      },
+      "gateResult": null
+    },
+    {
+      "stageId": "s1-business-requirements",
+      "status": "passed",
+      "artifactHashes": {
+        "brd.md": "7baf754083fd86476797ea06bbb6d48032eeb8dfb2682d93fca48f9b83c5800b"
+      },
+      "gateResult": null
+    },
+    {
+      "stageId": "s2-service-requirements",
+      "status": "skipped",
+      "artifactHashes": {},
+      "gateResult": null
+    },
+    {
+      "stageId": "s3-data-model",
+      "status": "skipped",
+      "artifactHashes": {},
+      "gateResult": null
+    },
+    {
+      "stageId": "s4-api-specification",
+      "status": "skipped",
+      "artifactHashes": {},
+      "gateResult": null
+    },
+    {
+      "stageId": "s5-ui-specification",
+      "status": "passed",
+      "artifactHashes": {
+        "build-spec.yaml": "a8f4327c3131c1b8872f412bab322862e3c0ee327a85d6166cef1c25ab886020"
+      },
+      "gateResult": null
+    }
+  ],
+  "verification": {
+    "compile": "skipped",
+    "test": "skipped",
+    "lint": "skipped",
+    "typecheck": "skipped",
+    "securityScan": "skipped"
+  },
+  "proofChain": {
+    "recordCount": 0,
+    "chainIntegrity": "empty"
+  },
+  "certificateHash": "12118d885f071707d920ccfe9c06403047c197213387a723a6cd301f2f556865",
+  "signingPublicKey": "NwawcwdGwgHSQqbr+e6QVn6c+/wPGWqDN7868Jhs7PA=",
+  "certSignature": "dGH1SSuaHMAuoEo76D2lL37kLU2wbFjy15FUNhgHftEUFB856aSsEhFxW05GEqjXAgVc8tYbuVA8/blLtEXECA==",
+  "signingAttestation": {
+    "kind": "ephemeral",
+    "note": "auto-generated for pipeline run"
+  }
+}

@@ -49,6 +49,6 @@
     "@tenant-tail/cli-win32-x64": "0.1.0"
   },
   "tenant-tail": {
-    "spec": "000-tenant-tail-bootstrap"
+    "spec": "003-distribution"
   }
 }

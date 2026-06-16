@@ -1,0 +1,254 @@
+{
+  "build": {
+    "compilerId": "spec-spine",
+    "compilerVersion": "0.4.0",
+    "contentHash": "b5e5f0bc1bcc18eeaa051bedd2413d07bf8483d897ca684f9b01f1f8a797422d",
+    "inputRoot": "."
+  },
+  "specVersion": "0.3.0",
+  "specs": [
+    {
+      "authors": [
+        "tenant-tail"
+      ],
+      "created": "2026-06-16",
+      "establishes": [
+        {
+          "kind": "file",
+          "path": "Cargo.toml"
+        },
+        {
+          "kind": "directory",
+          "path": "crates/tenant-tail-types"
+        },
+        {
+          "kind": "directory",
+          "path": "crates/tenant-tail-core"
+        },
+        {
+          "kind": "directory",
+          "path": "crates/tenant-tail-cli"
+        },
+        {
+          "kind": "directory",
+          "path": "npm"
+        }
+      ],
+      "id": "000-tenant-tail-bootstrap",
+      "implementation": "pending",
+      "kind": "tooling",
+      "references": [
+        {
+          "role": "context",
+          "unit": {
+            "kind": "file",
+            "path": "README.md"
+          }
+        }
+      ],
+      "risk": "low",
+      "sectionHeadings": [
+        "000: tenant-tail bootstrap",
+        "1. Purpose",
+        "2. Territory",
+        "3. Behavior",
+        "4. Out of scope"
+      ],
+      "specPath": "specs/000-tenant-tail-bootstrap/spec.md",
+      "status": "draft",
+      "summary": "Bootstrap spec for the tenant-tail repository: a verify-only toolkit that re-checks a factory's run-side paperwork (governance certificate, provenance) with no trust in the producer. This spec establishes the workspace skeleton (a three-crate Cargo workspace mirroring spec-spine, plus the npm binary-distribution wrapper) and seeds this repo's own spec corpus, which is governed by the pinned spec-spine library. The verify cores and the verbs that expose them are added by subsequent specs in this corpus as the extraction lands; see OAP spec 219-tenant-tail-verifier-toolkit for the decision to vend and the extraction map.\n",
+      "title": "tenant-tail bootstrap (verify-only toolkit skeleton)"
+    },
+    {
+      "authors": [
+        "tenant-tail"
+      ],
+      "created": "2026-06-16",
+      "dependsOn": [
+        "000-tenant-tail-bootstrap"
+      ],
+      "establishes": [
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/certificate.rs"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/inter_stage_manifest.rs"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/platform_jws.rs"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/tests/certificate_parity.rs"
+        }
+      ],
+      "id": "001-certificate-verify-core",
+      "implementation": "complete",
+      "kind": "verify-core",
+      "references": [
+        {
+          "role": "context",
+          "unit": {
+            "kind": "file",
+            "path": "NOTICE"
+          }
+        }
+      ],
+      "risk": "medium",
+      "sectionHeadings": [
+        "001: Certificate verify core",
+        "1. Purpose",
+        "2. Territory",
+        "3. Behavior",
+        "4. Out of scope"
+      ],
+      "specPath": "specs/001-certificate-verify-core/spec.md",
+      "status": "draft",
+      "summary": "The governance-certificate verify engine, extracted verify-only from OAP's factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the certificate self-hash, verifies the Ed25519 engine signature, re-checks stage artifact hashes against files on disk, replays the signed inter-stage manifest chain, and adjudicates the optional platform countersign offline. The emitter (builder, signing-key handling, generation) is excluded by construction; the one spec-spine seam is feature-gated OFF so the vended build links no spec-spine crate.\n",
+      "title": "Certificate verify core (offline governance-certificate verification)"
+    },
+    {
+      "authors": [
+        "tenant-tail"
+      ],
+      "created": "2026-06-16",
+      "dependsOn": [
+        "000-tenant-tail-bootstrap"
+      ],
+      "establishes": [
+        {
+          "kind": "directory",
+          "path": "crates/tenant-tail-core/src/provenance"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/data/core-allowlist.txt"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-types/src/provenance.rs"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-types/src/knowledge.rs"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-types/src/budget.rs"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-types/src/lib.rs"
+        },
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/tests/provenance_parity.rs"
+        }
+      ],
+      "id": "002-provenance-verify-core",
+      "implementation": "complete",
+      "kind": "verify-core",
+      "references": [
+        {
+          "role": "context",
+          "unit": {
+            "kind": "file",
+            "path": "NOTICE"
+          }
+        }
+      ],
+      "risk": "medium",
+      "sectionHeadings": [
+        "002: Provenance verify core",
+        "1. Purpose",
+        "2. Territory",
+        "3. Behavior",
+        "4. Out of scope"
+      ],
+      "specPath": "specs/002-provenance-verify-core/spec.md",
+      "status": "draft",
+      "summary": "The claim-provenance verify engine, extracted from OAP's standalone `provenance-validator` (spec 121) and relicensed Apache-2.0 (see NOTICE), plus the bounded carrier types it consumes (the `provenance` + `knowledge` + `budget` slice of OAP's `factory-contracts`). Exposes the pure, byte- deterministic `validate()` and the read-only retroactive `audit()`. LLM- independent by construction: the whole dependency graph is crypto + serde only, so the validator cannot be fooled by the model that minted the claims.\n",
+      "title": "Provenance verify core (claim-provenance re-check)"
+    },
+    {
+      "authors": [
+        "tenant-tail"
+      ],
+      "created": "2026-06-16",
+      "dependsOn": [
+        "000-tenant-tail-bootstrap",
+        "001-certificate-verify-core",
+        "002-provenance-verify-core"
+      ],
+      "establishes": [
+        {
+          "kind": "file",
+          "path": "crates/tenant-tail-cli/src/main.rs"
+        },
+        {
+          "kind": "file",
+          "path": "npm/bin/tenant-tail.js"
+        },
+        {
+          "kind": "file",
+          "path": "npm/lib/platform.js"
+        },
+        {
+          "kind": "file",
+          "path": "npm/scripts/generate-platform-packages.js"
+        },
+        {
+          "kind": "file",
+          "path": "npm/scripts/smoke-test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "npm/test/platform.test.js"
+        },
+        {
+          "kind": "file",
+          "path": "npm/package.json"
+        },
+        {
+          "kind": "file",
+          "path": ".github/workflows/release.yml"
+        },
+        {
+          "kind": "file",
+          "path": ".github/workflows/ci.yml"
+        }
+      ],
+      "id": "003-distribution",
+      "implementation": "complete",
+      "kind": "tooling",
+      "references": [
+        {
+          "role": "context",
+          "unit": {
+            "kind": "file",
+            "path": "npm/README.md"
+          }
+        }
+      ],
+      "risk": "medium",
+      "sectionHeadings": [
+        "003: Distribution",
+        "1. Purpose",
+        "2. Territory",
+        "3. Behavior",
+        "4. Out of scope"
+      ],
+      "specPath": "specs/003-distribution/spec.md",
+      "status": "draft",
+      "summary": "How the tenant-tail verifier reaches a produced application: the CLI verb surface (`verify-certificate`, `verify-provenance`; `verify-sbom` forward- declared), the prebuilt-binary npm shim a TS/JS app pins next to spec-spine (one exact-version devDependency, one pin per verb), and the tag-gated release pipeline that builds the five per-triple archives (with SBOM + SLSA provenance) and assembles the `@tenant-tail/cli-<os>-<cpu>` platform packages. The shim is a launcher, not a native addon, and mirrors spec-spine's npm/ shape.\n",
+      "title": "Distribution: the verb surface, npm binary shim, and release pipeline"
+    }
+  ],
+  "validation": {
+    "passed": true,
+    "violations": []
+  }
+}

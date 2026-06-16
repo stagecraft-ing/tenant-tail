@@ -18,6 +18,19 @@ chrono.workspace = true
 unicode-normalization.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+# The certificate verifier's one spec-spine seam (`validate_spec_id_resolution`)
+# is feature-gated OFF for the vended build: tenant-tail links no spec-spine
+# crate, so the seam is compiled out and the dependency graph stays a DAG.
+# Enabling it would require wiring `open_agentic_spec_registry_reader`, which
+# tenant-tail deliberately does not depend on; the gated code is preserved only
+# to document behavior parity with OAP's in-tree verifier.
+default = []
+spec-id-resolution = []
+
 [lints]
 workspace = true
 

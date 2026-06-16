@@ -1,0 +1,47 @@
+tenant-tail
+Copyright 2026 Bartek Kus
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+--------------------------------------------------------------------------------
+Relicensed verify-only source (authorized)
+--------------------------------------------------------------------------------
+
+The two verify cores and their carrier types were extracted from the
+Open Agentic Platform (OAP), where they carry SPDX headers reading
+`AGPL-3.0-or-later`. Relicensing this extracted, verify-only source to
+Apache-2.0 is the prerogative of the sole copyright holder (Bartek Kus) and is
+an explicit, authorized act (OAP spec 219-tenant-tail-verifier-toolkit; the
+tenant-tail handoff). The extraction is verify-only by construction: the
+identity-bearing emitter (the certificate builder, signing-key handling,
+`build-certificate`) is excluded and never ported.
+
+Extraction map (OAP source -> tenant-tail destination):
+
+  crates/factory-engine/src/governance_certificate.rs
+      -> crates/tenant-tail-core/src/certificate.rs
+         (verify path only; builder/signing/generation stripped; the lone
+          spec-spine seam `validate_spec_id_resolution` is feature-gated OFF
+          and links no spec-spine crate in the vended build)
+
+  crates/factory-engine/src/inter_stage_manifest.rs
+      -> crates/tenant-tail-core/src/inter_stage_manifest.rs
+         (types + `verify_manifest`; key-minting / signing / session stripped)
+
+  crates/factory-engine/src/platform_jws.rs
+      -> crates/tenant-tail-core/src/platform_jws.rs
+         (compact-JWS verification; verify-only as authored)
+
+  crates/provenance-validator/  (already a standalone crate)
+      -> crates/tenant-tail-core/src/provenance/
+         (the pure `validate()` and read-only `audit()` pipeline)
+
+  crates/factory-contracts/src/{provenance,knowledge,budget}.rs
+      -> crates/tenant-tail-types/src/{provenance,knowledge,budget}.rs
+         (the bounded carrier slice the validator consumes; the heavier
+          factory-contracts modules and the agent-frontmatter / ts-rs leaf are
+          deliberately left behind)
+
+Per the relicense, OAP's per-file AGPL SPDX header lines are NOT carried into
+the ported files; matching spec-spine's convention, the ported files carry no
+per-file SPDX header.
