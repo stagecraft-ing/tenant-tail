@@ -41,13 +41,20 @@ network: the spec 102 do-not-trust-the-producer posture, turned tenant-ward.
 
 This bootstrap spec exists so the repository has a governed seed: the workspace
 skeleton compiles, this corpus is non-empty, and spec-spine can dogfood it. The
-substance (the cert and provenance verify cores, the verbs, the release matrix,
-the npm wrapper contract) lands in later specs in this corpus as the extraction
-described by OAP spec 219 proceeds.
+substance has since landed (per OAP spec 219): the cert verify core
+(`001-certificate-verify-core`), the provenance verify core
+(`002-provenance-verify-core`), and the verb surface + npm wrapper + release
+matrix (`003-distribution`) each claim their own files. This spec retains the
+crate skeleton it seeded: the per-crate manifests and crate roots that wire the
+substance together.
 
 ## 2. Territory
 
-This spec establishes the skeleton, mapped to the establishes edges above:
+This spec establishes the skeleton, mapped to the establishes edges above. The
+directory edges are a coupling floor: the substance files within them are claimed
+by the feature specs (001-003), while the crate skeleton (each crate's
+`Cargo.toml` manifest and `src/lib.rs` root) and the workspace root remain
+bootstrap territory.
 
 - `Cargo.toml`: the three-crate workspace root (types / core / cli), mirroring
   spec-spine's shape; the CLI binary is `tenant-tail`.

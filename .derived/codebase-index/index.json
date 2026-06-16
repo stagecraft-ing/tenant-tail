@@ -1,6 +1,6 @@
 {
   "build": {
-    "contentHash": "c6f49ae56616b255be775629700cc08d96c451fb5ac984eea45a9b6666b028e8",
+    "contentHash": "857d082c48b6bf080070e1f5a4972adcfb596a658d2fdcea17546f3ef7c7721c",
     "indexerId": "spec-spine",
     "indexerVersion": "0.4.0",
     "repoRoot": "."
@@ -184,9 +184,26 @@
           {
             "path": "crates/tenant-tail-core/tests/certificate_parity.rs",
             "source": "spec-edge"
+          },
+          {
+            "path": "crates/tenant-tail-core/tests/fixtures/cert-run",
+            "source": "spec-edge"
           }
         ],
         "resolvedUnits": [
+          {
+            "locations": [
+              {
+                "file": "crates/tenant-tail-core/tests/fixtures/cert-run"
+              }
+            ],
+            "ownership": true,
+            "sourceField": "establishes",
+            "unit": {
+              "kind": "directory",
+              "path": "crates/tenant-tail-core/tests/fixtures/cert-run"
+            }
+          },
           {
             "locations": [
               {
@@ -274,6 +291,10 @@
             "source": "spec-edge"
           },
           {
+            "path": "crates/tenant-tail-core/tests/fixtures/provenance-project",
+            "source": "spec-edge"
+          },
+          {
             "path": "crates/tenant-tail-core/tests/provenance_parity.rs",
             "source": "spec-edge"
           },
@@ -306,6 +327,19 @@
             "unit": {
               "kind": "directory",
               "path": "crates/tenant-tail-core/src/provenance"
+            }
+          },
+          {
+            "locations": [
+              {
+                "file": "crates/tenant-tail-core/tests/fixtures/provenance-project"
+              }
+            ],
+            "ownership": true,
+            "sourceField": "establishes",
+            "unit": {
+              "kind": "directory",
+              "path": "crates/tenant-tail-core/tests/fixtures/provenance-project"
             }
           },
           {

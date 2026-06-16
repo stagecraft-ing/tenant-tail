@@ -22,6 +22,7 @@ establishes:
   - { kind: file, path: "crates/tenant-tail-core/src/inter_stage_manifest.rs" }
   - { kind: file, path: "crates/tenant-tail-core/src/platform_jws.rs" }
   - { kind: file, path: "crates/tenant-tail-core/tests/certificate_parity.rs" }
+  - { kind: directory, path: "crates/tenant-tail-core/tests/fixtures/cert-run" }
 references:
   - { unit: { kind: file, path: "NOTICE" }, role: context }
 ---

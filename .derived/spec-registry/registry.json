@@ -2,7 +2,7 @@
   "build": {
     "compilerId": "spec-spine",
     "compilerVersion": "0.4.0",
-    "contentHash": "b5e5f0bc1bcc18eeaa051bedd2413d07bf8483d897ca684f9b01f1f8a797422d",
+    "contentHash": "d38a4739c7d5cc66af1932cc5a6ab54d6d2def09dfbb1591f9917f1bac2129e6",
     "inputRoot": "."
   },
   "specVersion": "0.3.0",
@@ -83,6 +83,10 @@
         {
           "kind": "file",
           "path": "crates/tenant-tail-core/tests/certificate_parity.rs"
+        },
+        {
+          "kind": "directory",
+          "path": "crates/tenant-tail-core/tests/fixtures/cert-run"
         }
       ],
       "id": "001-certificate-verify-core",
@@ -146,6 +150,10 @@
         {
           "kind": "file",
           "path": "crates/tenant-tail-core/tests/provenance_parity.rs"
+        },
+        {
+          "kind": "directory",
+          "path": "crates/tenant-tail-core/tests/fixtures/provenance-project"
         }
       ],
       "id": "002-provenance-verify-core",

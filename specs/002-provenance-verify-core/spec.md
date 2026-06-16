@@ -24,6 +24,7 @@ establishes:
   - { kind: file, path: "crates/tenant-tail-types/src/budget.rs" }
   - { kind: file, path: "crates/tenant-tail-types/src/lib.rs" }
   - { kind: file, path: "crates/tenant-tail-core/tests/provenance_parity.rs" }
+  - { kind: directory, path: "crates/tenant-tail-core/tests/fixtures/provenance-project" }
 references:
   - { unit: { kind: file, path: "NOTICE" }, role: context }
 ---
