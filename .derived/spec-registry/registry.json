@@ -2,7 +2,7 @@
   "build": {
     "compilerId": "spec-spine",
     "compilerVersion": "0.4.0",
-    "contentHash": "d38a4739c7d5cc66af1932cc5a6ab54d6d2def09dfbb1591f9917f1bac2129e6",
+    "contentHash": "56975e402436325d226fce516e7398bc5db566f26694d2d5ff9c388f7258dd99",
     "inputRoot": "."
   },
   "specVersion": "0.3.0",
@@ -227,6 +227,10 @@
         {
           "kind": "file",
           "path": ".github/workflows/ci.yml"
+        },
+        {
+          "kind": "file",
+          "path": ".github/workflows/determinism.yml"
         }
       ],
       "id": "003-distribution",

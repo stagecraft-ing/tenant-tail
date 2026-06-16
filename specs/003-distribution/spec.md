@@ -29,6 +29,7 @@ establishes:
   - { kind: file, path: "npm/package.json" }
   - { kind: file, path: ".github/workflows/release.yml" }
   - { kind: file, path: ".github/workflows/ci.yml" }
+  - { kind: file, path: ".github/workflows/determinism.yml" }
 references:
   - { unit: { kind: file, path: "npm/README.md" }, role: context }
 ---
@@ -53,7 +54,13 @@ machinery that delivers it: the npm binary shim and the release pipeline.
   faithful mirror of spec-spine's `npm/`.
 - `.github/workflows/release.yml`: the tag-gated per-triple build + SBOM + SLSA
   provenance + GitHub Release + crates.io + npm publish.
-- `.github/workflows/ci.yml`: the test + dogfood gates.
+- `.github/workflows/ci.yml`: the CI gates, mirroring spec-spine's shape. A
+  `test` job (build/test/clippy/fmt), a `self-governance` job (compile / index
+  check / lint / couple, run via the pinned spec-spine), the reusable
+  `determinism` job, and a `ci-gate` aggregate that is the single required check.
+- `.github/workflows/determinism.yml`: the cross-platform golden proving the
+  committed governance artifacts (registry + index) are byte-identical on every
+  triple, so the committed `.derived/` is platform-independent.
 
 ## 3. Behavior
 
@@ -68,6 +75,9 @@ machinery that delivers it: the npm binary shim and the release pipeline.
   project.
 - The tenant pin model: one exact-version `tenant-tail` devDependency next to
   `spec-spine`; `npm ci` sha512 lockfile integrity covers it. One pin, every verb.
+- CI MUST expose a single aggregate required check (`ci-gate`) so branch
+  protection and the merge queue gate on one stable name; a failed or cancelled
+  upstream job MUST fail it, a skipped (event-gated) job MUST NOT.
 
 ## 4. Out of scope
 
