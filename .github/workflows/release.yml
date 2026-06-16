@@ -1,0 +1,231 @@
+name: release
+
+# Tag-gated prebuilt-binary release (SKELETON, mirrors spec-spine's release.yml).
+# Pushing a `v*` tag builds a per-triple archive (with a .sha256 sidecar) for
+# each of the five supported targets, attaches them to the GitHub Release,
+# publishes the crates to crates.io, and assembles + publishes the npm platform
+# packages from the SAME archives (no second Rust build).
+#
+# tenant-tail vends npm only, so spec-spine's publish-pypi job is intentionally
+# omitted. publish-crates and publish-npm are idempotent: each skips any version
+# already live, so re-running a tag is safe. publish-npm is gated on NPM_TOKEN;
+# absent the secret it is a clean no-op. Each archive ships a per-target
+# CycloneDX SBOM and a SLSA build-provenance attestation.
+#
+# This is FR-004 of OAP spec 219 (the one genuinely net-new infrastructure leg).
+# Validate action versions and the build matrix before the first real release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build · ${{ matrix.triple }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    triple: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, triple: aarch64-unknown-linux-gnu }
+          # x86_64-apple-darwin cross-compiles on the Apple Silicon runner.
+          - { os: macos-latest,     triple: x86_64-apple-darwin }
+          - { os: macos-latest,     triple: aarch64-apple-darwin }
+          - { os: windows-latest,   triple: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add target (no-op if native)
+        run: rustup target add ${{ matrix.triple }}
+      - name: Build release binary
+        run: cargo build --release --locked --bin tenant-tail --target ${{ matrix.triple }}
+
+      - name: Stage archive contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXT=""; [ "${{ runner.os }}" = "Windows" ] && EXT=".exe"
+          mkdir -p staging
+          cp "target/${{ matrix.triple }}/release/tenant-tail${EXT}" staging/
+          cp LICENSE README.md staging/
+          echo "ARCHIVE_BASE=tenant-tail-${GITHUB_REF_NAME}-${{ matrix.triple }}" >> "$GITHUB_ENV"
+
+      - name: Package (tar.gz + sha256) for Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C staging -czf "${ARCHIVE_BASE}.tar.gz" .
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${ARCHIVE_BASE}.tar.gz" > "${ARCHIVE_BASE}.tar.gz.sha256"
+          else
+            shasum -a 256 "${ARCHIVE_BASE}.tar.gz" > "${ARCHIVE_BASE}.tar.gz.sha256"
+          fi
+          cat "${ARCHIVE_BASE}.tar.gz.sha256"
+          echo "ARCHIVE_FILE=${ARCHIVE_BASE}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (zip + sha256) for Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $base = $env:ARCHIVE_BASE
+          Compress-Archive -Path staging/* -DestinationPath "$base.zip" -Force
+          $hash = (Get-FileHash "$base.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $base.zip" | Out-File -Encoding ascii -NoNewline "$base.zip.sha256"
+          Get-Content "$base.zip.sha256"
+          Add-Content -Path $env:GITHUB_ENV -Value "ARCHIVE_FILE=$base.zip"
+
+      # --- Supply-chain artifacts: per-target CycloneDX SBOM + provenance ---
+      - name: Generate per-target CycloneDX SBOM
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: ${{ env.ARCHIVE_BASE }}.cdx.json
+          upload-artifact: false
+      - name: Fail closed if the SBOM has no components
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));const n=(d.components||[]).length;console.log('SBOM components:',n);if(n===0){console.error('refusing to ship an SBOM with zero components');process.exit(1);}" "${ARCHIVE_BASE}.cdx.json"
+      - name: Attest build provenance for the archive
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ env.ARCHIVE_FILE }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.triple }}
+          path: |
+            tenant-tail-*.tar.gz
+            tenant-tail-*.tar.gz.sha256
+            tenant-tail-*.zip
+            tenant-tail-*.zip.sha256
+            tenant-tail-*.cdx.json
+          if-no-files-found: error
+
+  publish:
+    name: publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: archive-*
+          merge-multiple: true
+      - name: List release assets
+        run: ls -la dist
+      - name: Create / update the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+  publish-crates:
+    name: publish to crates.io
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish types, core, cli (tolerate versions already on crates.io)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -uo pipefail
+          for crate in tenant-tail-types tenant-tail-core tenant-tail-cli; do
+            echo "::group::publish $crate"
+            if out="$(cargo publish -p "$crate" --locked 2>&1)"; then
+              echo "$out"; echo ">> published $crate"
+            else
+              echo "$out"
+              if echo "$out" | grep -qiE "already (uploaded|exists)"; then
+                echo ">> $crate version already on crates.io, skipping"
+              else
+                echo ">> publish failed for $crate"; exit 1
+              fi
+            fi
+            echo "::endgroup::"
+          done
+
+  publish-npm:
+    name: publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for NPM_TOKEN
+        id: gate
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=npm publish skipped::NPM_TOKEN secret not set; skipping npm publish"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.present == 'true'
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v4
+        if: steps.gate.outputs.present == 'true'
+        with:
+          path: dist/archives
+          pattern: archive-*
+          merge-multiple: true
+
+      - name: Assemble platform packages from the release archives
+        if: steps.gate.outputs.present == 'true'
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          cp ../LICENSE LICENSE
+          VERSION="${GITHUB_REF_NAME#v}"
+          node scripts/generate-platform-packages.js \
+            --version "$VERSION" --archives ../dist/archives --out dist/packages --write-main
+          ls -la dist/packages/@tenant-tail
+
+      - name: Publish (idempotent; skip versions already on npm)
+        if: steps.gate.outputs.present == 'true'
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -uo pipefail
+          publish_if_absent() {
+            local dir="$1" name version
+            name="$(node -p "require('./${dir}/package.json').name")"
+            version="$(node -p "require('./${dir}/package.json').version")"
+            echo "::group::publish ${name}@${version}"
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo ">> ${name}@${version} already on npm, skipping"
+            else
+              npm publish "${dir}" --access public
+              echo ">> published ${name}@${version}"
+            fi
+            echo "::endgroup::"
+          }
+          # Platform packages first, then the main package, so there is never a
+          # window where `tenant-tail` is live without its binaries.
+          for d in dist/packages/@tenant-tail/*; do
+            publish_if_absent "$d"
+          done
+          publish_if_absent "."

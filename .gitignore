@@ -1,0 +1,34 @@
+# Rust build output
+/target
+**/*.rs.bk
+
+# npm binary-distribution shim: generated platform packages (and the prebuilt
+# binaries they carry) are assembled from release artifacts at publish time,
+# never committed; ditto local install artifacts and the publish-time LICENSE
+# copy. tenant-tail vends npm only (no Python shim), so there is no /py/ here.
+/npm/dist/
+/npm/package-lock.json
+/npm/LICENSE
+node_modules/
+
+# NOTE: .derived/ (compiler/indexer output) is intentionally NOT ignored; it is
+# committed so the coupling gate and content-hash staleness check can compare the
+# committed registry/index against current inputs. Determinism makes this sane.
+# The one exception: build-meta.json carries a wall-clock `builtAt` (the sole
+# non-deterministic artifact), so it would churn on every compile; ignore it.
+.derived/**/build-meta.json
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.env*
+# Local secrets (e.g. CARGO_REGISTRY_TOKEN): never commit
+.env
+
+.idea/
+
+# Agent tooling (.claude/) is committed: agents/, rules/, skills/ are the
+# curated cross-agent setup CLAUDE.md and AGENTS.md reference. But per-agent
+# learned memory is local, session-generated state (like the user's own memory
+# dir, which lives outside the repo), so it is not version-controlled.
+.claude/agent-memory/

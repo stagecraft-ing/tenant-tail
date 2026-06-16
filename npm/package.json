@@ -1,0 +1,54 @@
+{
+  "name": "tenant-tail",
+  "version": "0.1.0",
+  "description": "The tenant-tail CLI: a verify-only toolkit that re-checks a factory's run-side paperwork (governance certificate, provenance) with no trust in the producer. Ships the prebuilt binary; no Rust toolchain required.",
+  "keywords": [
+    "governance",
+    "verification",
+    "certificate",
+    "provenance",
+    "attestation",
+    "cli",
+    "rust",
+    "tenant"
+  ],
+  "homepage": "https://github.com/bartekus/tenant-tail#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bartekus/tenant-tail.git",
+    "directory": "npm"
+  },
+  "bugs": {
+    "url": "https://github.com/bartekus/tenant-tail/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "The tenant-tail Authors",
+  "type": "commonjs",
+  "bin": {
+    "tenant-tail": "bin/tenant-tail.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "generate": "node scripts/generate-platform-packages.js",
+    "smoke": "scripts/smoke-test.sh"
+  },
+  "optionalDependencies": {
+    "@tenant-tail/cli-darwin-arm64": "0.1.0",
+    "@tenant-tail/cli-darwin-x64": "0.1.0",
+    "@tenant-tail/cli-linux-x64": "0.1.0",
+    "@tenant-tail/cli-linux-arm64": "0.1.0",
+    "@tenant-tail/cli-win32-x64": "0.1.0"
+  },
+  "tenant-tail": {
+    "spec": "003-distribution"
+  }
+}

@@ -1,0 +1,50 @@
+# tenant-tail: workspace root.
+#
+# A verify-only toolkit that re-checks a factory's run-side paperwork
+# (governance certificate, provenance) with no trust in the producer (the spec
+# 102 do-not-trust-the-producer posture, turned tenant-ward). Mirrors
+# spec-spine's three-crate shape (types/core/cli); the CLI binary is `tenant-tail`.
+#
+# Governed by OAP spec 219-tenant-tail-verifier-toolkit (the decision to vend)
+# and by this repo's OWN specs/ corpus (compiled by the pinned spec-spine
+# library, the dogfooding pattern). SCAFFOLD: structure only; the verify cores
+# are implemented by the tenant-tail worker agent.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/tenant-tail-types",
+    "crates/tenant-tail-core",
+    "crates/tenant-tail-cli",
+]
+
+# Shared metadata inherited by member crates via `field.workspace = true`.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/bartekus/tenant-tail"
+homepage = "https://github.com/bartekus/tenant-tail"
+authors = ["The tenant-tail Authors"]
+keywords = ["governance", "verification", "certificate", "provenance", "agents"]
+categories = ["development-tools", "command-line-utilities"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+base64 = "0.22"
+ed25519-dalek = "2"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+unicode-normalization = "0.1"
+thiserror = "2"
+# Internal crates (path + version so the published surface is not path-only).
+tenant-tail-types = { version = "0.1.0", path = "crates/tenant-tail-types" }
+tenant-tail-core = { version = "0.1.0", path = "crates/tenant-tail-core" }
+
+# The verify cores are crypto + serde only; no unsafe is required, and the
+# public boundary is FFI-friendly without it (mirrors spec-spine).
+[workspace.lints.rust]
+unsafe_code = "forbid"

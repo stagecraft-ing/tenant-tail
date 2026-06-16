@@ -1,0 +1,51 @@
+# spec-spine governing the tenant-tail repository (dogfood).
+#
+# tenant-tail vends a verify-only toolkit; its own specs/ corpus is governed by
+# the published spec-spine library, pinned as a dev dependency and invoked as
+# `npx --no-install spec-spine {compile,lint,index check,couple}`. This is the
+# same dogfooding pattern spec-spine and OAP both follow. spec-spine reads its
+# config from `spec-spine.toml` at the repo root; only the metadata namespace
+# and layout differ from the built-in defaults.
+
+[manifest]
+# tenant-tail crates carry `[package.metadata.tenant-tail].spec = "NNN-slug"`.
+metadata_namespace = "tenant-tail"
+
+[domains]
+allowed = []        # disabled: tenant-tail specs do not declare a `domain`
+
+[kind]
+allowed = []        # disabled: `kind` is free-text (symmetric with [domains])
+
+[layout]
+specs_dir     = "specs"
+derived_dir   = ".derived"
+standards_dir = "standards/spec"
+schemas_dir   = "standards/schemas"
+cargo_workspace = "Cargo.toml"
+# No npm workspace in this repo; the default still probes these and finds none.
+npm_workspaces = ["package.json", "pnpm-workspace.yaml"]
+standalone_rust_workspaces = []
+# The npm binary-distribution shim is a tracked npm package outside any npm
+# workspace (this repo has none), declared as a standalone package.
+standalone_npm_packages    = ["npm"]
+
+[index]
+extra_hashed_inputs = ["standards/**", ".github/workflows/**"]
+resolver_exclusions = ["target", "node_modules", ".derived", "dist", "build", ".next"]
+
+[branding]
+# The governing binary is the published spec-spine CLI.
+compiler_id = "spec-spine"
+indexer_id  = "spec-spine"
+
+[coupling]
+bypass_prefixes = ["**/README.md"]
+waiver_keyword = "Spec-Drift-Waiver:"
+
+[provenance.uri_schemes]
+knowledge        = "knowledge://"
+code-fingerprint = "fingerprint://"
+
+[frontmatter]
+extra_known_keys = []

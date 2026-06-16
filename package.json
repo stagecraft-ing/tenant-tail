@@ -1,0 +1,19 @@
+{
+  "name": "tenant-tail-repo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Repo-root dev manifest: pins the spec-spine governance toolchain so this repo's specs/ corpus is self-governed (the dogfood pattern). Not published; the vended package is npm/ (the tenant-tail CLI shim).",
+  "license": "Apache-2.0",
+  "scripts": {
+    "spec:compile": "spec-spine compile",
+    "spec:lint": "spec-spine lint --fail-on-warn",
+    "spec:index": "spec-spine index check",
+    "spec:check": "spec-spine compile && spec-spine index check && spec-spine lint --fail-on-warn"
+  },
+  "devDependencies": {
+    "spec-spine": "0.4.0"
+  },
+  "tenant-tail": {
+    "spec": "000-tenant-tail-bootstrap"
+  }
+}
