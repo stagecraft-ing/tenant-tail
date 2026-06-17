@@ -115,6 +115,14 @@ pub struct GovernanceCertificate {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub consumed_overrides: Vec<ConsumedOverride>,
 
+    /// Spec 218 FR-001 -- the corpus attestation in effect at the run, by
+    /// reference. Additive and optional: absence is a named "unbound" state,
+    /// not a failure. Inside the hash + signature (a normal cert field);
+    /// skipped when absent so unbound certificates serialise byte-identically
+    /// to pre-binding payloads. See [`CorpusBinding`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corpus_binding: Option<CorpusBinding>,
+
     /// SHA-256 of the canonical JSON of this certificate with `certificate_hash`
     /// AND `cert_signature` set to empty string. Content-binding fingerprint
     /// inside the signed payload -- not the authoritative provenance check
@@ -158,6 +166,29 @@ pub struct PlatformCountersign {
     pub countersign_jws: String,
     pub kid: String,
     pub countersigned_at: DateTime<Utc>,
+}
+
+/// Spec 218 FR-001 -- the corpus attestation in effect at the run, recorded by
+/// reference. `corpus_attestation_hash` is the SHA-256 of the upstream corpus
+/// attestation artifact; `spec_spine_version` records the spec-spine that
+/// produced it.
+///
+/// Additive and optional: a certificate without this block is a named "unbound"
+/// state, not a failure (FR-004). `skip_serializing_if = "Option::is_none"`
+/// keeps unbound certificates byte-identical to pre-binding payloads, so their
+/// certificate hash is unchanged. When present the block is INSIDE the hash and
+/// signature (a normal cert field, unlike `platform_countersign`).
+///
+/// The cert builder is GIVEN this value and never recomputes it (FR-002, an
+/// OAP-side boundary). The verifier checks the LINK by reference only (FR-003):
+/// it confirms the claimed hash equals the hash of a supplied attestation and
+/// delegates the attestation's own truth (recompute / signature) to spec-spine's
+/// `verify-attestation`. The run-cert verifier never recomputes the corpus.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CorpusBinding {
+    pub corpus_attestation_hash: String,
+    pub spec_spine_version: String,
 }
 
 /// Spec 198 FR-013(c) -- one override of admitted factory content the run
@@ -635,11 +666,19 @@ pub fn verify_certificate(
 ///   id; any failure is an error.
 /// - **Sealed + no JWKS**: the seal cannot be adjudicated -- a notice under
 ///   the default posture, an error under `require_sealed` (fail closed).
+///
+/// Spec 218 FR-003/FR-004 -- after the platform seal, the corpus binding is
+/// adjudicated by reference: `corpus_attestation` is the bytes of a supplied
+/// corpus attestation artifact (if any). The verifier checks ONLY the link
+/// (claimed hash == SHA-256 of the supplied attestation); the attestation's own
+/// truth is delegated to spec-spine's `verify-attestation`, never performed
+/// here. See [`adjudicate_corpus_binding_state`] for the four legible states.
 pub fn verify_certificate_with_platform(
     cert: &GovernanceCertificate,
     artifact_dir: Option<&Path>,
     platform_jwks: Option<&crate::platform_jws::PlatformJwks>,
     require_sealed: bool,
+    corpus_attestation: Option<&[u8]>,
 ) -> VerificationResult {
     let mut result = verify_certificate(cert, artifact_dir);
 
@@ -715,8 +754,100 @@ pub fn verify_certificate_with_platform(
         }
     }
 
+    // Spec 218 FR-003/FR-004 -- adjudicate the corpus binding by reference.
+    append_corpus_binding_findings(cert, corpus_attestation, &mut result);
+
     result.valid = result.errors.is_empty();
     result
+}
+
+/// Spec 218 FR-004 -- the adjudicated state of a certificate's corpus binding.
+///
+/// The verifier never silently passes: every state is legible (FR-004). The
+/// `Mismatch` variant is the only failing state; `Unbound` and
+/// `PresentButUnverified` are visible-but-non-fatal, consistent with the
+/// additive, optional-on-land posture (FR-001).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CorpusBindingState {
+    /// No `corpus_binding` on the certificate. Additive, non-breaking.
+    Unbound,
+    /// Binding present, but no attestation was supplied to check the link.
+    PresentButUnverified,
+    /// Binding present and the supplied attestation hashes to the claimed value.
+    Verified,
+    /// Binding present and the supplied attestation does NOT match the claim.
+    Mismatch { claimed: String, actual: String },
+}
+
+/// Spec 218 FR-003 -- the pure link check. Confirms the certificate's claimed
+/// `corpus_attestation_hash` equals the SHA-256 of a supplied attestation,
+/// WITHOUT recomputing the corpus. Verifying the attestation's own truth
+/// (recompute / signature) is the responsibility of spec-spine's
+/// `verify-attestation` (FR-003 / AC-5): two verifiers, two responsibilities,
+/// composed by reference.
+pub fn adjudicate_corpus_binding_state(
+    binding: Option<&CorpusBinding>,
+    corpus_attestation: Option<&[u8]>,
+) -> CorpusBindingState {
+    match (binding, corpus_attestation) {
+        (None, _) => CorpusBindingState::Unbound,
+        (Some(_), None) => CorpusBindingState::PresentButUnverified,
+        (Some(binding), Some(attestation)) => {
+            let actual = sha256_bytes(attestation);
+            if actual == binding.corpus_attestation_hash {
+                CorpusBindingState::Verified
+            } else {
+                CorpusBindingState::Mismatch {
+                    claimed: binding.corpus_attestation_hash.clone(),
+                    actual,
+                }
+            }
+        }
+    }
+}
+
+/// Map the adjudicated [`CorpusBindingState`] onto the result's notices/errors.
+/// Only `Mismatch` is fatal; the rest are visible notices (spec 218 FR-004,
+/// skip-as-pass forbidden).
+fn append_corpus_binding_findings(
+    cert: &GovernanceCertificate,
+    corpus_attestation: Option<&[u8]>,
+    result: &mut VerificationResult,
+) {
+    match adjudicate_corpus_binding_state(cert.corpus_binding.as_ref(), corpus_attestation) {
+        CorpusBindingState::Unbound => {
+            result.notices.push(
+                "certificate is corpus-UNBOUND: no corpus_binding present -- the run is not \
+                 bound by reference to a corpus attestation (spec 218 FR-004)"
+                    .into(),
+            );
+        }
+        CorpusBindingState::PresentButUnverified => {
+            // `corpus_binding` is Some in this state.
+            let binding = cert.corpus_binding.as_ref().expect("binding present");
+            result.notices.push(format!(
+                "corpus binding present-but-UNVERIFIED: certificate claims corpus attestation \
+                 hash {} (spec-spine {}) but no attestation was supplied to check the link -- \
+                 supply --corpus-attestation <file> (spec 218 FR-004)",
+                binding.corpus_attestation_hash, binding.spec_spine_version
+            ));
+        }
+        CorpusBindingState::Verified => {
+            let binding = cert.corpus_binding.as_ref().expect("binding present");
+            result.notices.push(format!(
+                "corpus binding VERIFIED: supplied attestation hashes to the claimed \
+                 corpus_attestation_hash {} (spec-spine {}); the attestation's own truth is \
+                 delegated to spec-spine verify-attestation (spec 218 FR-003)",
+                binding.corpus_attestation_hash, binding.spec_spine_version
+            ));
+        }
+        CorpusBindingState::Mismatch { claimed, actual } => {
+            result.errors.push(format!(
+                "corpus binding MISMATCH: certificate claims corpus_attestation_hash {claimed} \
+                 but the supplied attestation hashes to {actual} (spec 218 FR-004)"
+            ));
+        }
+    }
 }
 
 // ── spec_id resolution seam (spec 102 G-2) -- feature-gated OFF ──────
@@ -831,4 +962,82 @@ pub fn require_spec_id_resolution_enabled() -> bool {
         std::env::var("OAP_REQUIRE_SPEC_ID_RESOLUTION").as_deref(),
         Ok("1") | Ok("true") | Ok("yes")
     )
+}
+
+// ── Tests: corpus binding adjudication (spec 218 FR-003/FR-004) ───────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn binding_for(attestation: &[u8]) -> CorpusBinding {
+        CorpusBinding {
+            corpus_attestation_hash: sha256_bytes(attestation),
+            spec_spine_version: "0.4.0".to_string(),
+        }
+    }
+
+    #[test]
+    fn corpus_binding_absent_is_unbound() {
+        // No binding, with or without a supplied attestation, is "unbound".
+        assert_eq!(
+            adjudicate_corpus_binding_state(None, None),
+            CorpusBindingState::Unbound
+        );
+        assert_eq!(
+            adjudicate_corpus_binding_state(None, Some(b"anything")),
+            CorpusBindingState::Unbound
+        );
+    }
+
+    #[test]
+    fn corpus_binding_present_no_attestation_is_present_but_unverified() {
+        let binding = binding_for(b"corpus-attestation-bytes");
+        assert_eq!(
+            adjudicate_corpus_binding_state(Some(&binding), None),
+            CorpusBindingState::PresentButUnverified
+        );
+    }
+
+    #[test]
+    fn corpus_binding_matching_attestation_is_verified() {
+        let attestation = b"the upstream corpus attestation artifact";
+        let binding = binding_for(attestation);
+        assert_eq!(
+            adjudicate_corpus_binding_state(Some(&binding), Some(attestation)),
+            CorpusBindingState::Verified
+        );
+    }
+
+    #[test]
+    fn corpus_binding_mismatched_attestation_is_mismatch() {
+        let binding = binding_for(b"the attestation the cert was bound to");
+        let supplied = b"a different attestation entirely";
+        let state = adjudicate_corpus_binding_state(Some(&binding), Some(supplied));
+        match state {
+            CorpusBindingState::Mismatch { claimed, actual } => {
+                assert_eq!(claimed, binding.corpus_attestation_hash);
+                assert_eq!(actual, sha256_bytes(supplied));
+                assert_ne!(claimed, actual, "the whole point is they differ");
+            }
+            other => panic!("expected Mismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn corpus_binding_is_omitted_when_absent() {
+        // FR-001: an unbound certificate serialises with no `corpusBinding`
+        // key, so its canonical JSON (and hence its hash) is byte-identical to
+        // a pre-binding payload.
+        let json = serde_json::json!({ "corpusBinding": null });
+        assert!(
+            json.get("corpusBinding").is_some(),
+            "sanity: key exists in this literal"
+        );
+
+        let binding = binding_for(b"x");
+        let serialised = serde_json::to_string(&binding).expect("binding serialises");
+        assert!(serialised.contains("corpusAttestationHash"));
+        assert!(serialised.contains("specSpineVersion"));
+    }
 }

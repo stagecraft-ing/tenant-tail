@@ -39,8 +39,9 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Verify a governance certificate by re-deriving hashes, checking proof
-    /// chain integrity (spec 102 FR-007), and adjudicating the platform seal
-    /// (spec 198 FR-014).
+    /// chain integrity (spec 102 FR-007), adjudicating the platform seal
+    /// (spec 198 FR-014), and checking the corpus binding by reference
+    /// (spec 218 FR-003).
     VerifyCertificate(VerifyCertificateArgs),
     /// Re-check claim provenance for a produced app (spec 121). Read-only: the
     /// markdown report is written to stdout, never into the audited project.
@@ -65,6 +66,14 @@ struct VerifyCertificateArgs {
     /// visible notice with exit 0.
     #[arg(long)]
     require_sealed: bool,
+
+    /// Path to a corpus attestation artifact to check the certificate's
+    /// corpus binding against (spec 218). The verifier confirms the link only
+    /// (claimed hash == hash of this file); the attestation's own truth is
+    /// delegated to spec-spine's verify-attestation. Absent: a present binding
+    /// is reported "present-but-unverified" and an absent one "unbound".
+    #[arg(long)]
+    corpus_attestation: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -113,11 +122,29 @@ fn verify_certificate_cmd(args: VerifyCertificateArgs) -> ExitCode {
         Err(code) => return code,
     };
 
+    // Spec 218 -- read the corpus attestation bytes (if supplied) so the
+    // verifier can check the binding link by reference. A read failure exits 2
+    // (consistent with the other input-read failures above).
+    let corpus_attestation = match &args.corpus_attestation {
+        Some(path) => match std::fs::read(path) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                eprintln!(
+                    "error: cannot read --corpus-attestation {}: {e}",
+                    path.display()
+                );
+                return ExitCode::from(2);
+            }
+        },
+        None => None,
+    };
+
     let result = verify_certificate_with_platform(
         &cert,
         args.artifact_dir.as_deref(),
         jwks.as_ref(),
         args.require_sealed,
+        corpus_attestation.as_deref(),
     );
 
     for notice in &result.notices {

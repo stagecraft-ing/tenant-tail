@@ -22,7 +22,8 @@ pub mod provenance;
 
 // Cert verify surface, re-exported at the crate root for the CLI verbs.
 pub use certificate::{
-    CERTIFICATE_VERSION, GovernanceCertificate, VerificationResult, verify_certificate,
+    CERTIFICATE_VERSION, CorpusBinding, CorpusBindingState, GovernanceCertificate,
+    VerificationResult, adjudicate_corpus_binding_state, verify_certificate,
     verify_certificate_with_platform,
 };
 pub use platform_jws::PlatformJwks;

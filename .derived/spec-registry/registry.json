@@ -2,7 +2,7 @@
   "build": {
     "compilerId": "spec-spine",
     "compilerVersion": "0.4.0",
-    "contentHash": "56975e402436325d226fce516e7398bc5db566f26694d2d5ff9c388f7258dd99",
+    "contentHash": "c4d5722dfaadf5cee9ea2ba4b05371d60f587fc3b4bb3b582856ee145d2f74e3",
     "inputRoot": "."
   },
   "specVersion": "0.3.0",
@@ -111,7 +111,7 @@
       ],
       "specPath": "specs/001-certificate-verify-core/spec.md",
       "status": "draft",
-      "summary": "The governance-certificate verify engine, extracted verify-only from OAP's factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the certificate self-hash, verifies the Ed25519 engine signature, re-checks stage artifact hashes against files on disk, replays the signed inter-stage manifest chain, and adjudicates the optional platform countersign offline. The emitter (builder, signing-key handling, generation) is excluded by construction; the one spec-spine seam is feature-gated OFF so the vended build links no spec-spine crate.\n",
+      "summary": "The governance-certificate verify engine, extracted verify-only from OAP's factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the certificate self-hash, verifies the Ed25519 engine signature, re-checks stage artifact hashes against files on disk, replays the signed inter-stage manifest chain, adjudicates the optional platform countersign offline, and checks the optional corpus binding by reference (spec 218). The emitter (builder, signing-key handling, generation) is excluded by construction; the one spec-spine seam is feature-gated OFF so the vended build links no spec-spine crate.\n",
       "title": "Certificate verify core (offline governance-certificate verification)"
     },
     {
@@ -231,6 +231,14 @@
         {
           "kind": "file",
           "path": ".github/workflows/determinism.yml"
+        },
+        {
+          "kind": "directory",
+          "path": "py"
+        },
+        {
+          "kind": "file",
+          "path": "py/scripts/generate_wheels.py"
         }
       ],
       "id": "003-distribution",
@@ -242,6 +250,13 @@
           "unit": {
             "kind": "file",
             "path": "npm/README.md"
+          }
+        },
+        {
+          "role": "context",
+          "unit": {
+            "kind": "file",
+            "path": "py/README.md"
           }
         }
       ],
@@ -255,8 +270,8 @@
       ],
       "specPath": "specs/003-distribution/spec.md",
       "status": "draft",
-      "summary": "How the tenant-tail verifier reaches a produced application: the CLI verb surface (`verify-certificate`, `verify-provenance`; `verify-sbom` forward- declared), the prebuilt-binary npm shim a TS/JS app pins next to spec-spine (one exact-version devDependency, one pin per verb), and the tag-gated release pipeline that builds the five per-triple archives (with SBOM + SLSA provenance) and assembles the `@tenant-tail/cli-<os>-<cpu>` platform packages. The shim is a launcher, not a native addon, and mirrors spec-spine's npm/ shape.\n",
-      "title": "Distribution: the verb surface, npm binary shim, and release pipeline"
+      "summary": "How the tenant-tail verifier reaches a produced application: the CLI verb surface (`verify-certificate`, `verify-provenance`; `verify-sbom` forward- declared), the prebuilt-binary npm shim a TS/JS app pins next to spec-spine (one exact-version devDependency, one pin per verb), and the tag-gated release pipeline that builds the five per-triple archives (with SBOM + SLSA provenance) and assembles the `@tenant-tail/cli-<os>-<cpu>` platform packages. The shim is a launcher, not a native addon, and mirrors spec-spine's npm/ shape. A parallel PyPI channel (`uvx tenant-tail ...`) ships the same prebuilt binary as five per-platform wheels plus an sdist refusal fallback, assembled from the same release archives (no second Rust build), mirroring spec-spine 008.\n",
+      "title": "Distribution: the verb surface, npm + PyPI binary shims, and release pipeline"
     }
   ],
   "validation": {
