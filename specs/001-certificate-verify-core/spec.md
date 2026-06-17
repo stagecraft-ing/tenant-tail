@@ -12,7 +12,8 @@ summary: >
   factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the
   certificate self-hash, verifies the Ed25519 engine signature, re-checks stage
   artifact hashes against files on disk, replays the signed inter-stage manifest
-  chain, and adjudicates the optional platform countersign offline. The emitter
+  chain, adjudicates the optional platform countersign offline, and checks the
+  optional corpus binding by reference (spec 218). The emitter
   (builder, signing-key handling, generation) is excluded by construction; the
   one spec-spine seam is feature-gated OFF so the vended build links no
   spec-spine crate.
@@ -63,6 +64,16 @@ relicensed Apache-2.0.
 - An absent platform countersign is `verifiable-but-unsealed`: a visible notice,
   exit 0, never silently equivalent to sealed. `--require-sealed` promotes it to
   an error.
+- The corpus binding (spec 218) is adjudicated by reference, never by recompute.
+  When the certificate carries a `corpusBinding`, the claimed
+  `corpusAttestationHash` is checked against the SHA-256 of a supplied
+  attestation (`--corpus-attestation`); verifying the attestation's own truth is
+  delegated to spec-spine's `verify-attestation`, never performed here. The four
+  states are legible and never skip-as-pass (spec 218 FR-004): `unbound` (no
+  binding), `present-but-unverified` (binding, no attestation supplied), and
+  `verified` are visible notices with exit 0; only a hash `mismatch` is an error.
+  The field is additive and optional, so an unbound certificate serialises
+  byte-identically to a pre-binding payload and the parity fixture is unaffected.
 - Behavior parity: a certificate emitted by OAP's in-tree emitter MUST verify
   here unchanged (the parity test is the gate).
 

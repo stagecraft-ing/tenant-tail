@@ -1,6 +1,6 @@
 {
   "build": {
-    "contentHash": "b3088b594fffe7af47ab53d78b9d2c1b500f676dbebb9eab37348e0ab101c816",
+    "contentHash": "c82f7cd614d36f587839344f862f08f18a36d9145355a573fd07f4550cc3c0d5",
     "indexerId": "spec-spine",
     "indexerVersion": "0.4.0",
     "repoRoot": "."
@@ -491,9 +491,38 @@
           {
             "path": "npm/test/platform.test.js",
             "source": "spec-edge"
+          },
+          {
+            "path": "py",
+            "source": "spec-edge"
+          },
+          {
+            "path": "py/README.md",
+            "source": "spec-edge"
+          },
+          {
+            "path": "py/scripts/generate_wheels.py",
+            "source": "spec-edge"
+          },
+          {
+            "path": "py/scripts/smoke_test.sh",
+            "source": "comment-header"
           }
         ],
         "resolvedUnits": [
+          {
+            "locations": [
+              {
+                "file": "py"
+              }
+            ],
+            "ownership": true,
+            "sourceField": "establishes",
+            "unit": {
+              "kind": "directory",
+              "path": "py"
+            }
+          },
           {
             "locations": [
               {
@@ -627,6 +656,19 @@
           {
             "locations": [
               {
+                "file": "py/scripts/generate_wheels.py"
+              }
+            ],
+            "ownership": true,
+            "sourceField": "establishes",
+            "unit": {
+              "kind": "file",
+              "path": "py/scripts/generate_wheels.py"
+            }
+          },
+          {
+            "locations": [
+              {
                 "file": "npm/README.md"
               }
             ],
@@ -635,6 +677,19 @@
             "unit": {
               "kind": "file",
               "path": "npm/README.md"
+            }
+          },
+          {
+            "locations": [
+              {
+                "file": "py/README.md"
+              }
+            ],
+            "ownership": false,
+            "sourceField": "references",
+            "unit": {
+              "kind": "file",
+              "path": "py/README.md"
             }
           }
         ],

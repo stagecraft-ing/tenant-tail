@@ -75,6 +75,12 @@ bootstrap territory.
 - This repo's own `specs/` corpus MUST be governed by the pinned spec-spine
   library (compile / lint / index check / couple), the same dogfooding pattern
   spec-spine and OAP follow.
+- Each crate's `src/lib.rs` root composes and re-exports the verify surface its
+  modules implement (the certificate types and verify entrypoints, the
+  provenance validator). When a feature spec adds a type to that surface (for
+  example the corpus-binding types added under `001-certificate-verify-core`),
+  the crate root re-exports it too; the root stays bootstrap territory while the
+  substance stays with the owning feature spec.
 
 ## 4. Out of scope
 
@@ -82,6 +88,8 @@ bootstrap territory.
   paths, the feature-gated spec-spine seam, the release matrix, and the npm
   publish flow. Each is owned by a subsequent spec in this corpus, authored as
   the extraction lands.
-- The corpus attestation (spec-spine `023-ledger-seal`) and the run-cert chain
-  edge (OAP spec 218): sibling work in other corpora, referenced for context
-  only.
+- The corpus attestation's own truth (spec-spine `023-ledger-seal`, verified by
+  spec-spine's `verify-attestation`) and the emit side of the run-cert corpus
+  binding (OAP spec 218, which mints the `corpusBinding` block): sibling work in
+  other corpora. The tenant-ward VERIFY side of the binding (the by-reference
+  link check) has landed under `001-certificate-verify-core`.

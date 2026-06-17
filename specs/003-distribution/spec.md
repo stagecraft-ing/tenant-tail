@@ -1,6 +1,6 @@
 ---
 id: "003-distribution"
-title: "Distribution: the verb surface, npm binary shim, and release pipeline"
+title: "Distribution: the verb surface, npm + PyPI binary shims, and release pipeline"
 status: draft
 created: "2026-06-16"
 authors: ["tenant-tail"]
@@ -15,6 +15,9 @@ summary: >
   pipeline that builds the five per-triple archives (with SBOM + SLSA
   provenance) and assembles the `@tenant-tail/cli-<os>-<cpu>` platform packages.
   The shim is a launcher, not a native addon, and mirrors spec-spine's npm/ shape.
+  A parallel PyPI channel (`uvx tenant-tail ...`) ships the same prebuilt binary
+  as five per-platform wheels plus an sdist refusal fallback, assembled from the
+  same release archives (no second Rust build), mirroring spec-spine 008.
 depends_on:
   - "000-tenant-tail-bootstrap"
   - "001-certificate-verify-core"
@@ -30,8 +33,11 @@ establishes:
   - { kind: file, path: ".github/workflows/release.yml" }
   - { kind: file, path: ".github/workflows/ci.yml" }
   - { kind: file, path: ".github/workflows/determinism.yml" }
+  - { kind: directory, path: "py" }
+  - { kind: file, path: "py/scripts/generate_wheels.py" }
 references:
   - { unit: { kind: file, path: "npm/README.md" }, role: context }
+  - { unit: { kind: file, path: "py/README.md" }, role: context }
 ---
 
 # 003: Distribution
@@ -52,6 +58,11 @@ machinery that delivers it: the npm binary shim and the release pipeline.
 - `npm/`: the prebuilt-binary distribution shim (launcher + platform resolver +
   publish-time platform-package generator + its unit test and smoke test). A
   faithful mirror of spec-spine's `npm/`.
+- `py/`: the PyPI channel (one project + five per-platform wheels + an sdist
+  whose only entry point is the unsupported-host refusal). `platform_map.py` is
+  the Python copy of the five-target fact; `generate_wheels.py` assembles
+  byte-reproducible, version-locked wheels from the release archives. A faithful
+  mirror of spec-spine's `py/` (spec-spine 008).
 - `.github/workflows/release.yml`: the tag-gated per-triple build + SBOM + SLSA
   provenance + GitHub Release + crates.io + npm publish.
 - `.github/workflows/ci.yml`: the CI gates, mirroring spec-spine's shape. A
@@ -67,9 +78,19 @@ machinery that delivers it: the npm binary shim and the release pipeline.
 - The shim MUST work with no network at install and under `npm ci`: the launcher
   resolves the matching `@tenant-tail/cli-<os>-<cpu>` optional dependency and
   exec's the prebuilt binary, forwarding argv and exit code. No postinstall.
-- The five-target `SUPPORTED` table MUST stay in lockstep across
-  `npm/lib/platform.js`, `npm/scripts/generate-platform-packages.js`, and the
-  `release.yml` build matrix.
+- The five-target platform fact MUST stay in lockstep across the four copies:
+  the `SUPPORTED` map in `npm/lib/platform.js`, the `TARGETS` map in
+  `npm/scripts/generate-platform-packages.js`, the `TARGETS` map in
+  `py/src/tenant_tail/platform_map.py`, and the `release.yml` build matrix.
+- The PyPI channel MUST deliver the same prebuilt binary as the npm shim with no
+  second Rust build: `generate_wheels.py` assembles five per-platform wheels
+  (the wheel platform tag is the selector) plus an sdist from the release
+  archives, byte-reproducibly and version-locked to the tag. An unsupported host
+  (musl/Alpine, win-arm64, 32-bit) matches no wheel and falls to the sdist, whose
+  only entry point names the host and points at `cargo install tenant-tail-cli`
+  (parity with the npm shim's unsupported-host refusal). Publish is OIDC
+  Trusted-Publishing and idempotent (skip-existing); absent the one-time setup
+  (`vars.PYPI_TRUSTED_PUBLISHING`) the release leg is a clean no-op.
 - The verbs MUST be verify-only and offline: no emitter verb, no `--jwks-url`
   network fetch (a saved JWKS file is read instead), no writes into an audited
   project.

@@ -1,0 +1,57 @@
+# Spec: specs/003-distribution/spec.md
+#
+# This pyproject builds ONLY the source distribution (sdist). The five platform
+# wheels are assembled by scripts/generate_wheels.py from the release archives
+# (no build backend, no second Rust build): the exact parallel of npm's
+# generate-platform-packages.js. We publish: 5 platform wheels + this sdist.
+# We never publish the pure `py3-none-any` wheel this backend would build; that
+# wheel is built locally, only on a host where no platform wheel matched, where
+# its `tenant-tail` entry point is the clear refusal (_refuse.py).
+# setuptools>=77 gives us the standard SPDX `license`/`license-files` fields
+# (PEP 639); with it, a license *classifier* is rejected as redundant.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tenant-tail"
+# Single source of truth at publish time is the git tag; generate_wheels.py and
+# the sdist build are both invoked with --version / SETUPTOOLS_SCM-free explicit
+# version by release.yml, and the lock check fails on a tag/version mismatch
+# (§3.5 parity). Tracks the workspace version; bumped in lockstep with
+# Cargo.toml and npm/package.json.
+version = "0.1.0"
+description = "The tenant-tail verification toolkit: re-check a factory's run-side paperwork (governance certificate, provenance) with no trust in the producer. Ships the prebuilt binary; no Rust toolchain required."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "The tenant-tail Authors" }]
+keywords = ["governance", "verification", "certificate", "provenance", "attestation", "cli", "rust", "tenant"]
+# Honest floor for the tiny Python that the sdist actually runs. The platform
+# wheels declare a more permissive floor (set in generate_wheels.py) so a Python
+# version mismatch never pushes a supported host onto this sdist.
+requires-python = ">=3.9"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Programming Language :: Rust",
+  "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Homepage = "https://github.com/bartekus/tenant-tail"
+Repository = "https://github.com/bartekus/tenant-tail"
+Issues = "https://github.com/bartekus/tenant-tail/issues"
+
+# Same command name on every host. On a supported host the platform wheel's
+# bundled binary provides `tenant-tail`; on an unsupported host this sdist
+# provides `tenant-tail` -> the refusal. Only one is ever installed per host, so
+# the names never collide.
+[project.scripts]
+tenant-tail = "tenant_tail._refuse:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
