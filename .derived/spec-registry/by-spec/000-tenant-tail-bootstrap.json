@@ -1,0 +1,56 @@
+{
+  "record": {
+    "authors": [
+      "tenant-tail"
+    ],
+    "created": "2026-06-16",
+    "establishes": [
+      {
+        "kind": "file",
+        "path": "Cargo.toml"
+      },
+      {
+        "kind": "directory",
+        "path": "crates/tenant-tail-types"
+      },
+      {
+        "kind": "directory",
+        "path": "crates/tenant-tail-core"
+      },
+      {
+        "kind": "directory",
+        "path": "crates/tenant-tail-cli"
+      },
+      {
+        "kind": "directory",
+        "path": "npm"
+      }
+    ],
+    "id": "000-tenant-tail-bootstrap",
+    "implementation": "pending",
+    "kind": "tooling",
+    "references": [
+      {
+        "role": "context",
+        "unit": {
+          "kind": "file",
+          "path": "README.md"
+        }
+      }
+    ],
+    "risk": "low",
+    "sectionHeadings": [
+      "000: tenant-tail bootstrap",
+      "1. Purpose",
+      "2. Territory",
+      "3. Behavior",
+      "4. Out of scope"
+    ],
+    "specPath": "specs/000-tenant-tail-bootstrap/spec.md",
+    "status": "draft",
+    "summary": "Bootstrap spec for the tenant-tail repository: a verify-only toolkit that re-checks a factory's run-side paperwork (governance certificate, provenance) with no trust in the producer. This spec establishes the workspace skeleton (a three-crate Cargo workspace mirroring spec-spine, plus the npm binary-distribution wrapper) and seeds this repo's own spec corpus, which is governed by the pinned spec-spine library. The verify cores and the verbs that expose them are added by subsequent specs in this corpus as the extraction lands; see OAP spec 219-tenant-tail-verifier-toolkit for the decision to vend and the extraction map.\n",
+    "title": "tenant-tail bootstrap (verify-only toolkit skeleton)"
+  },
+  "shardHash": "2660088af10f7a6a1baca96ce544c0c2a1386bb53b31e292edeaf4175fe5d032",
+  "specVersion": "1.0.0"
+}

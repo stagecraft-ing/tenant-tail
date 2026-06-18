@@ -116,7 +116,7 @@ of OAP's schema-parity-walker):
 
 This repo's own `specs/` corpus is governed by the **pinned `spec-spine` library** (the
 self-governance pattern spec-spine and OAP follow). The pin has landed: the repo-root
-`package.json` declares `spec-spine` as a devDependency (currently `0.4.0`), installed via
+`package.json` declares `spec-spine` as a devDependency (currently `0.5.0`), installed via
 `npm ci` from the committed `package-lock.json`. Config is `spec-spine.toml` (metadata
 namespace `tenant-tail`; `domain`/`kind` validation disabled). New code must be claimed by
 a spec in `specs/` or the coupling gate fails. The corpus: `000-tenant-tail-bootstrap`
@@ -134,9 +134,10 @@ npx --no-install spec-spine couple --base <sha> --head HEAD --pr-body <file>
 npm run spec:check                             # compile && index check && lint, in one
 ```
 
-Note: `.derived/` (compiler/indexer output: `spec-registry/registry.json`,
-`codebase-index/index.json`) is deliberately **committed** so the coupling gate and the
-staleness check can compare committed against current. Only `build-meta.json` is ignored
+Note: `.derived/` (compiler/indexer output, sharded by spec-spine 0.5.0 into
+`spec-registry/by-spec/*.json` and `codebase-index/by-spec,by-package/*.json`) is
+deliberately **committed** so the coupling gate and the staleness check can compare
+committed against current. Only `build-meta.json` is ignored
 (it carries a wall-clock timestamp). Two `.githooks/` scripts install a merge driver that
 regenerates `.derived/` on merge conflicts.
 
@@ -174,8 +175,9 @@ branch protection / the merge queue to require just that one name, not the enume
   push to `main` and `merge_group` runs do not carry, so it is PR-gated.
 - `determinism` (reusable workflow `determinism.yml`) -- regenerates `.derived/` on four
   triples (Linux x86_64/aarch64, macOS aarch64, Windows x86_64) and asserts the
-  `registry.json` and `index.json` digests are byte-identical across all of them, proving
-  the committed artifacts are platform-independent. `build-meta.json` is excluded.
+  `spec-registry/` and `codebase-index/` shard-tree digests are byte-identical across all
+  of them, proving the committed artifacts are platform-independent. `build-meta.json` is
+  excluded.
 
 `release.yml` is tag-gated (`v*`): builds a per-triple archive (with a `.sha256` sidecar, a
 per-target CycloneDX SBOM, and a SLSA build-provenance attestation) for all five targets,

@@ -1,0 +1,168 @@
+{
+  "mapping": {
+    "dependsOn": [
+      "000-tenant-tail-bootstrap"
+    ],
+    "implementingPaths": [
+      {
+        "path": "NOTICE",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/src/data/core-allowlist.txt",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/src/provenance",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/tests/fixtures/provenance-project",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/tests/provenance_parity.rs",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-types/src/budget.rs",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-types/src/knowledge.rs",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-types/src/lib.rs",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-types/src/provenance.rs",
+        "source": "spec-edge"
+      }
+    ],
+    "resolvedUnits": [
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/src/provenance"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "directory",
+          "path": "crates/tenant-tail-core/src/provenance"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/tests/fixtures/provenance-project"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "directory",
+          "path": "crates/tenant-tail-core/tests/fixtures/provenance-project"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/src/data/core-allowlist.txt"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/data/core-allowlist.txt"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/tests/provenance_parity.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/tests/provenance_parity.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-types/src/budget.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-types/src/budget.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-types/src/knowledge.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-types/src/knowledge.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-types/src/lib.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-types/src/lib.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-types/src/provenance.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-types/src/provenance.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "NOTICE"
+          }
+        ],
+        "ownership": false,
+        "sourceField": "references",
+        "unit": {
+          "kind": "file",
+          "path": "NOTICE"
+        }
+      }
+    ],
+    "specId": "002-provenance-verify-core",
+    "specStatus": "draft"
+  },
+  "schemaVersion": "1.0.0",
+  "shardHash": "25d04cdef7fdb6a3625735ef74bc11dc15d3387edf5f2781c063df38bc96c65b"
+}

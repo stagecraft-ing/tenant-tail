@@ -1,0 +1,96 @@
+{
+  "record": {
+    "authors": [
+      "tenant-tail"
+    ],
+    "created": "2026-06-16",
+    "dependsOn": [
+      "000-tenant-tail-bootstrap",
+      "001-certificate-verify-core",
+      "002-provenance-verify-core"
+    ],
+    "establishes": [
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-cli/src/main.rs"
+      },
+      {
+        "kind": "file",
+        "path": "npm/bin/tenant-tail.js"
+      },
+      {
+        "kind": "file",
+        "path": "npm/lib/platform.js"
+      },
+      {
+        "kind": "file",
+        "path": "npm/scripts/generate-platform-packages.js"
+      },
+      {
+        "kind": "file",
+        "path": "npm/scripts/smoke-test.sh"
+      },
+      {
+        "kind": "file",
+        "path": "npm/test/platform.test.js"
+      },
+      {
+        "kind": "file",
+        "path": "npm/package.json"
+      },
+      {
+        "kind": "file",
+        "path": ".github/workflows/release.yml"
+      },
+      {
+        "kind": "file",
+        "path": ".github/workflows/ci.yml"
+      },
+      {
+        "kind": "file",
+        "path": ".github/workflows/determinism.yml"
+      },
+      {
+        "kind": "directory",
+        "path": "py"
+      },
+      {
+        "kind": "file",
+        "path": "py/scripts/generate_wheels.py"
+      }
+    ],
+    "id": "003-distribution",
+    "implementation": "complete",
+    "kind": "tooling",
+    "references": [
+      {
+        "role": "context",
+        "unit": {
+          "kind": "file",
+          "path": "npm/README.md"
+        }
+      },
+      {
+        "role": "context",
+        "unit": {
+          "kind": "file",
+          "path": "py/README.md"
+        }
+      }
+    ],
+    "risk": "medium",
+    "sectionHeadings": [
+      "003: Distribution",
+      "1. Purpose",
+      "2. Territory",
+      "3. Behavior",
+      "4. Out of scope"
+    ],
+    "specPath": "specs/003-distribution/spec.md",
+    "status": "draft",
+    "summary": "How the tenant-tail verifier reaches a produced application: the CLI verb surface (`verify-certificate`, `verify-provenance`; `verify-sbom` forward- declared), the prebuilt-binary npm shim a TS/JS app pins next to spec-spine (one exact-version devDependency, one pin per verb), and the tag-gated release pipeline that builds the five per-triple archives (with SBOM + SLSA provenance) and assembles the `@tenant-tail/cli-<os>-<cpu>` platform packages. The shim is a launcher, not a native addon, and mirrors spec-spine's npm/ shape. A parallel PyPI channel (`uvx tenant-tail ...`) ships the same prebuilt binary as five per-platform wheels plus an sdist refusal fallback, assembled from the same release archives (no second Rust build), mirroring spec-spine 008.\n",
+    "title": "Distribution: the verb surface, npm + PyPI binary shims, and release pipeline"
+  },
+  "shardHash": "8dd10aeba309d29c833b601504b92127af4a1d6bdaae8d142a945ab2543b82fb",
+  "specVersion": "1.0.0"
+}

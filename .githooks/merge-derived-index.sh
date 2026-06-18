@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Git merge driver `tenant-tail-derived-regen` for the two committed derived
-# artifacts:
-#   .derived/spec-registry/registry.json   (compiler output)
-#   .derived/codebase-index/index.json      (indexer output)
+# Git merge driver `tenant-tail-derived-regen` for the committed derived
+# artifacts (spec-spine 0.5.0 shards them per-spec / per-package):
+#   .derived/spec-registry/by-spec/*.json                 (compiler output)
+#   .derived/codebase-index/by-spec/*.json, by-package/*.json (indexer output)
 #
-# Both carry a global content hash, so two branches that each regenerated them
+# Each shard carries a content hash, so two branches that each regenerated them
 # conflict textually on the hash line. This driver resolves that conflict
 # deterministically: it regenerates BOTH artifacts from the merged working tree
 # (via the pinned spec-spine governing binary) and hands the fresh artifact named
@@ -14,8 +14,7 @@
 #   ./.githooks/enable-merge-driver.sh
 #
 # Path assignment lives in committed .gitattributes:
-#   .derived/spec-registry/registry.json   merge=tenant-tail-derived-regen
-#   .derived/codebase-index/index.json      merge=tenant-tail-derived-regen
+#   .derived/**/*.json   merge=tenant-tail-derived-regen
 #
 # Git invokes:  <driver> %O %A %B %P
 #   $1 = %O  ancestor version  (unused: both artifacts are fully derived)
