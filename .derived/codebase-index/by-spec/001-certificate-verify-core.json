@@ -112,6 +112,6 @@
     "specId": "001-certificate-verify-core",
     "specStatus": "draft"
   },
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "shardHash": "710cb93d5443eb9268e4dd557d5b61c5a2722bfbd654dfc3d33b9ff54cf5b38e"
 }

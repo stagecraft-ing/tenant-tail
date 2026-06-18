@@ -258,6 +258,6 @@
     "specId": "003-distribution",
     "specStatus": "draft"
   },
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "shardHash": "0503ab00c4acaf37a2a3e531430b92843b20f77732501da893d61feeb98e5618"
 }
