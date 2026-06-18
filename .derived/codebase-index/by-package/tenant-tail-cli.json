@@ -5,6 +5,6 @@
     "path": "crates/tenant-tail-cli",
     "specRef": "000-tenant-tail-bootstrap"
   },
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "shardHash": "61fd3bd98d7a390a0fd4f70af16c7bbfd7d878f7cb5096fb68c62f0be5ce059d"
 }

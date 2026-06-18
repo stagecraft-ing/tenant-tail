@@ -163,6 +163,6 @@
     "specId": "002-provenance-verify-core",
     "specStatus": "draft"
   },
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "shardHash": "25d04cdef7fdb6a3625735ef74bc11dc15d3387edf5f2781c063df38bc96c65b"
 }

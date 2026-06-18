@@ -116,7 +116,7 @@ of OAP's schema-parity-walker):
 
 This repo's own `specs/` corpus is governed by the **pinned `spec-spine` library** (the
 self-governance pattern spec-spine and OAP follow). The pin has landed: the repo-root
-`package.json` declares `spec-spine` as a devDependency (currently `0.5.0`), installed via
+`package.json` declares `spec-spine` as a devDependency (currently `0.7.0`), installed via
 `npm ci` from the committed `package-lock.json`. Config is `spec-spine.toml` (metadata
 namespace `tenant-tail`; `domain`/`kind` validation disabled). New code must be claimed by
 a spec in `specs/` or the coupling gate fails. The corpus: `000-tenant-tail-bootstrap`
