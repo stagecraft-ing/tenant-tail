@@ -1,0 +1,59 @@
+{
+  "record": {
+    "authors": [
+      "tenant-tail"
+    ],
+    "created": "2026-06-16",
+    "dependsOn": [
+      "000-tenant-tail-bootstrap"
+    ],
+    "establishes": [
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-core/src/certificate.rs"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-core/src/inter_stage_manifest.rs"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-core/src/platform_jws.rs"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-core/tests/certificate_parity.rs"
+      },
+      {
+        "kind": "directory",
+        "path": "crates/tenant-tail-core/tests/fixtures/cert-run"
+      }
+    ],
+    "id": "001-certificate-verify-core",
+    "implementation": "complete",
+    "kind": "verify-core",
+    "references": [
+      {
+        "role": "context",
+        "unit": {
+          "kind": "file",
+          "path": "NOTICE"
+        }
+      }
+    ],
+    "risk": "medium",
+    "sectionHeadings": [
+      "001: Certificate verify core",
+      "1. Purpose",
+      "2. Territory",
+      "3. Behavior",
+      "4. Out of scope"
+    ],
+    "specPath": "specs/001-certificate-verify-core/spec.md",
+    "status": "draft",
+    "summary": "The governance-certificate verify engine, extracted verify-only from OAP's factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the certificate self-hash, verifies the Ed25519 engine signature, re-checks stage artifact hashes against files on disk, replays the signed inter-stage manifest chain, adjudicates the optional platform countersign offline, and checks the optional corpus binding by reference (spec 218). The emitter (builder, signing-key handling, generation) is excluded by construction; the one spec-spine seam is feature-gated OFF so the vended build links no spec-spine crate.\n",
+    "title": "Certificate verify core (offline governance-certificate verification)"
+  },
+  "shardHash": "bbfdd5b06f7e466094d50064740724f6e9c8caf524d08995c7369525ec187fd1",
+  "specVersion": "1.0.0"
+}

@@ -1,0 +1,10 @@
+{
+  "package": {
+    "kind": "rust-lib",
+    "name": "tenant-tail-types",
+    "path": "crates/tenant-tail-types",
+    "specRef": "000-tenant-tail-bootstrap"
+  },
+  "schemaVersion": "1.0.0",
+  "shardHash": "7d58a1ee196ec5bd8ea6aea2f6e8214ac22de37866cbfea426b9627494fc9907"
+}

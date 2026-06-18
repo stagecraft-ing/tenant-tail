@@ -1,0 +1,71 @@
+{
+  "record": {
+    "authors": [
+      "tenant-tail"
+    ],
+    "created": "2026-06-16",
+    "dependsOn": [
+      "000-tenant-tail-bootstrap"
+    ],
+    "establishes": [
+      {
+        "kind": "directory",
+        "path": "crates/tenant-tail-core/src/provenance"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-core/src/data/core-allowlist.txt"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-types/src/provenance.rs"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-types/src/knowledge.rs"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-types/src/budget.rs"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-types/src/lib.rs"
+      },
+      {
+        "kind": "file",
+        "path": "crates/tenant-tail-core/tests/provenance_parity.rs"
+      },
+      {
+        "kind": "directory",
+        "path": "crates/tenant-tail-core/tests/fixtures/provenance-project"
+      }
+    ],
+    "id": "002-provenance-verify-core",
+    "implementation": "complete",
+    "kind": "verify-core",
+    "references": [
+      {
+        "role": "context",
+        "unit": {
+          "kind": "file",
+          "path": "NOTICE"
+        }
+      }
+    ],
+    "risk": "medium",
+    "sectionHeadings": [
+      "002: Provenance verify core",
+      "1. Purpose",
+      "2. Territory",
+      "3. Behavior",
+      "4. Out of scope"
+    ],
+    "specPath": "specs/002-provenance-verify-core/spec.md",
+    "status": "draft",
+    "summary": "The claim-provenance verify engine, extracted from OAP's standalone `provenance-validator` (spec 121) and relicensed Apache-2.0 (see NOTICE), plus the bounded carrier types it consumes (the `provenance` + `knowledge` + `budget` slice of OAP's `factory-contracts`). Exposes the pure, byte- deterministic `validate()` and the read-only retroactive `audit()`. LLM- independent by construction: the whole dependency graph is crypto + serde only, so the validator cannot be fooled by the model that minted the claims.\n",
+    "title": "Provenance verify core (claim-provenance re-check)"
+  },
+  "shardHash": "97bfe6a23b70b9580f6a59f47f4652159b61237d02bfde0265ff849599c665e2",
+  "specVersion": "1.0.0"
+}

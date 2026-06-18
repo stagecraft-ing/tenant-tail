@@ -1,0 +1,117 @@
+{
+  "mapping": {
+    "dependsOn": [
+      "000-tenant-tail-bootstrap"
+    ],
+    "implementingPaths": [
+      {
+        "path": "NOTICE",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/src/certificate.rs",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/src/inter_stage_manifest.rs",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/src/platform_jws.rs",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/tests/certificate_parity.rs",
+        "source": "spec-edge"
+      },
+      {
+        "path": "crates/tenant-tail-core/tests/fixtures/cert-run",
+        "source": "spec-edge"
+      }
+    ],
+    "resolvedUnits": [
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/tests/fixtures/cert-run"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "directory",
+          "path": "crates/tenant-tail-core/tests/fixtures/cert-run"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/src/certificate.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/certificate.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/src/inter_stage_manifest.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/inter_stage_manifest.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/src/platform_jws.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/platform_jws.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/tests/certificate_parity.rs"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/tests/certificate_parity.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "NOTICE"
+          }
+        ],
+        "ownership": false,
+        "sourceField": "references",
+        "unit": {
+          "kind": "file",
+          "path": "NOTICE"
+        }
+      }
+    ],
+    "specId": "001-certificate-verify-core",
+    "specStatus": "draft"
+  },
+  "schemaVersion": "1.0.0",
+  "shardHash": "710cb93d5443eb9268e4dd557d5b61c5a2722bfbd654dfc3d33b9ff54cf5b38e"
+}

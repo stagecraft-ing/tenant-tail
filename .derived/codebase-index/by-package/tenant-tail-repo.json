@@ -1,0 +1,11 @@
+{
+  "package": {
+    "kind": "npm-package",
+    "name": "tenant-tail-repo",
+    "path": "",
+    "specRef": "000-tenant-tail-bootstrap",
+    "version": "0.1.0"
+  },
+  "schemaVersion": "1.0.0",
+  "shardHash": "83605777c5599ceba1406d815e3af92374289bbeb1ff51048f019b7f5f37954d"
+}

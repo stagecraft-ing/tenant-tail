@@ -2,14 +2,15 @@ name: determinism
 
 # Cross-platform determinism GOLDEN for the committed governance artifacts.
 #
-# tenant-tail dogfoods spec-spine and COMMITS the derived artifacts
-# (.derived/spec-registry/registry.json, .derived/codebase-index/index.json) so
-# the coupling gate and the `index check` staleness gate can compare committed
-# against current. That only holds if regeneration is a pure function of (config,
-# file contents): a contributor on macOS regenerates and commits, and CI on Linux
-# re-derives and compares. This workflow PROVES that empirically: each leg runs
-# the PINNED spec-spine over this repo's own corpus and publishes the digests;
-# the gather job fails if any digest differs across platforms.
+# tenant-tail dogfoods spec-spine and COMMITS the derived artifacts (the sharded
+# .derived/spec-registry/by-spec/ and .derived/codebase-index/by-spec/ +
+# by-package/ trees) so the coupling gate and the `index check` staleness gate
+# can compare committed against current. That only holds if regeneration is a
+# pure function of (config, file contents): a contributor on macOS regenerates
+# and commits, and CI on Linux re-derives and compares. This workflow PROVES that
+# empirically: each leg runs the PINNED spec-spine over this repo's own corpus
+# and publishes the digests; the gather job fails if any digest differs across
+# platforms.
 #
 # The verify cores' own determinism (the recomputed certificate hash, the
 # byte-deterministic provenance report) is covered by the parity tests in ci.yml's
@@ -70,10 +71,23 @@ jobs:
             elif command -v shasum    >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
             else openssl dgst -sha256 "$1" | awk '{print $NF}'; fi
           }
+          # spec-spine 0.5.0 shards the derived artifacts into per-spec / per-package
+          # JSON files rather than one monolithic file. Digest the whole tree: hash
+          # each shard, pair it with its repo-relative (forward-slash) path, sort for
+          # order-stability, then hash that manifest into one digest. build-meta.json
+          # is excluded (its wall-clock `builtAt` is the sole non-deterministic field).
+          digest_tree() {
+            local root="$1" manifest
+            manifest="$(mktemp)"
+            find "$root" -type f -name '*.json' ! -name 'build-meta.json' \
+              | LC_ALL=C sort \
+              | while IFS= read -r f; do echo "$(sha256 "$f")  $f"; done > "$manifest"
+            sha256 "$manifest"
+          }
           mkdir -p digests
           {
-            echo "${{ matrix.triple }} registry $(sha256 .derived/spec-registry/registry.json)"
-            echo "${{ matrix.triple }} index    $(sha256 .derived/codebase-index/index.json)"
+            echo "${{ matrix.triple }} registry $(digest_tree .derived/spec-registry)"
+            echo "${{ matrix.triple }} index    $(digest_tree .derived/codebase-index)"
           } | tee "digests/${{ matrix.triple }}.txt"
       - uses: actions/upload-artifact@v4
         with:
@@ -103,9 +117,9 @@ jobs:
             if [ "$count" -lt 4 ]; then
               echo "FAIL: $kind reported by only $count/4 triples (a leg failed to emit)"; fail=1
             elif [ "$n" -ne 1 ]; then
-              echo "FAIL: $kind.json differs across triples ($n distinct digests)"; fail=1
+              echo "FAIL: $kind shard tree differs across triples ($n distinct digests)"; fail=1
             else
-              echo "OK:   $kind.json is byte-identical across all $count triples"
+              echo "OK:   $kind shard tree is byte-identical across all $count triples"
             fi
           done
           exit $fail

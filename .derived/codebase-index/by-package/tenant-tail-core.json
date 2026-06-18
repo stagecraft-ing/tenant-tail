@@ -1,0 +1,10 @@
+{
+  "package": {
+    "kind": "rust-lib",
+    "name": "tenant-tail-core",
+    "path": "crates/tenant-tail-core",
+    "specRef": "000-tenant-tail-bootstrap"
+  },
+  "schemaVersion": "1.0.0",
+  "shardHash": "bf06129021ccd7a6d4ff69410c7bb9279d331591e98522f9b7ee66303a4372a4"
+}
