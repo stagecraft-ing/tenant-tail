@@ -52,5 +52,5 @@
     "title": "tenant-tail bootstrap (verify-only toolkit skeleton)"
   },
   "shardHash": "2660088af10f7a6a1baca96ce544c0c2a1386bb53b31e292edeaf4175fe5d032",
-  "specVersion": "1.0.0"
+  "specVersion": "1.1.0"
 }

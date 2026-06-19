@@ -55,5 +55,5 @@
     "title": "Certificate verify core (offline governance-certificate verification)"
   },
   "shardHash": "bbfdd5b06f7e466094d50064740724f6e9c8caf524d08995c7369525ec187fd1",
-  "specVersion": "1.0.0"
+  "specVersion": "1.1.0"
 }

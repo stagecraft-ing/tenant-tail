@@ -67,5 +67,5 @@
     "title": "Provenance verify core (claim-provenance re-check)"
   },
   "shardHash": "97bfe6a23b70b9580f6a59f47f4652159b61237d02bfde0265ff849599c665e2",
-  "specVersion": "1.0.0"
+  "specVersion": "1.1.0"
 }
