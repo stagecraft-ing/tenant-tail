@@ -92,5 +92,5 @@
     "title": "Distribution: the verb surface, npm + PyPI binary shims, and release pipeline"
   },
   "shardHash": "8dd10aeba309d29c833b601504b92127af4a1d6bdaae8d142a945ab2543b82fb",
-  "specVersion": "1.0.0"
+  "specVersion": "1.1.0"
 }
