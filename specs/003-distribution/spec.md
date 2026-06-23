@@ -33,6 +33,7 @@ establishes:
   - { kind: file, path: ".github/workflows/release.yml" }
   - { kind: file, path: ".github/workflows/ci.yml" }
   - { kind: file, path: ".github/workflows/determinism.yml" }
+  - { kind: file, path: ".github/workflows/ai-pr-review.yml" }
   - { kind: directory, path: "py" }
   - { kind: file, path: "py/scripts/generate_wheels.py" }
 references:
@@ -72,6 +73,14 @@ machinery that delivers it: the npm binary shim and the release pipeline.
 - `.github/workflows/determinism.yml`: the cross-platform golden proving the
   committed governance artifacts (registry + index) are byte-identical on every
   triple, so the committed `.derived/` is platform-independent.
+- `.github/workflows/ai-pr-review.yml`: the AI PR review, a reusable workflow
+  ci.yml dispatches into `ci-gate` so a failed or absent review blocks merge
+  (green ci-gate => actually reviewed or visibly skipped). It classifies a
+  Claude CLI failure: an unset `CLAUDE_CODE_OAUTH_TOKEN` or an auth/permission
+  error hard-fails (a broken token must be fixed, not masked), while any other
+  API failure (overloaded, rate-limit, 5xx, timeout, network) passes `ci-gate`
+  with a loud, visible PR notice so a third-party Anthropic incident does not
+  block merges. The pass is never silent.
 
 ## 3. Behavior
 
