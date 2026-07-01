@@ -4,8 +4,8 @@
     "name": "tenant-tail-repo",
     "path": "",
     "specRef": "000-tenant-tail-bootstrap",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "schemaVersion": "1.1.0",
-  "shardHash": "83605777c5599ceba1406d815e3af92374289bbeb1ff51048f019b7f5f37954d"
+  "shardHash": "e813ca7a17add44c9419506becfe8f570b0cab4746b37bfa3af75ce25962f24a"
 }

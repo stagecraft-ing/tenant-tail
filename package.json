@@ -1,6 +1,6 @@
 {
   "name": "tenant-tail-repo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Repo-root dev manifest: pins the spec-spine governance toolchain so this repo's specs/ corpus is self-governed (the dogfood pattern). Not published; the vended package is npm/ (the tenant-tail CLI shim).",
   "license": "Apache-2.0",
