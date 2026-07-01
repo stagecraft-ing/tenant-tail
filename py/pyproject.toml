@@ -20,7 +20,7 @@ name = "tenant-tail"
 # version by release.yml, and the lock check fails on a tag/version mismatch
 # (§3.5 parity). Tracks the workspace version; bumped in lockstep with
 # Cargo.toml and npm/package.json.
-version = "0.1.0"
+version = "0.2.0"
 description = "The tenant-tail verification toolkit: re-check a factory's run-side paperwork (governance certificate, provenance) with no trust in the producer. Ships the prebuilt binary; no Rust toolchain required."
 readme = "README.md"
 license = "Apache-2.0"
