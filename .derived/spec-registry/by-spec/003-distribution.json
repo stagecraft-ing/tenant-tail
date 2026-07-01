@@ -95,6 +95,6 @@
     "summary": "How the tenant-tail verifier reaches a produced application: the CLI verb surface (`verify-certificate`, `verify-provenance`; `verify-sbom` forward- declared), the prebuilt-binary npm shim a TS/JS app pins next to spec-spine (one exact-version devDependency, one pin per verb), and the tag-gated release pipeline that builds the five per-triple archives (with SBOM + SLSA provenance) and assembles the `@tenant-tail/cli-<os>-<cpu>` platform packages. The shim is a launcher, not a native addon, and mirrors spec-spine's npm/ shape. A parallel PyPI channel (`uvx tenant-tail ...`) ships the same prebuilt binary as five per-platform wheels plus an sdist refusal fallback, assembled from the same release archives (no second Rust build), mirroring spec-spine 008.\n",
     "title": "Distribution: the verb surface, npm + PyPI binary shims, and release pipeline"
   },
-  "shardHash": "10cf00c73a5a06050f5bb702ef4881e20489f014d7623f2f59d78565e954236f",
+  "shardHash": "8a5bb372557e11105252cdf4468961c5db70fd90a004d0dad4f2b143df2b3153",
   "specVersion": "1.1.0"
 }

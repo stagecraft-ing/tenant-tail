@@ -54,8 +54,10 @@ machinery that delivers it: the npm binary shim and the release pipeline.
 ## 2. Territory
 
 - `crates/tenant-tail-cli/src/main.rs`: the verb surface. `verify-certificate`
-  and `verify-provenance` are implemented; `verify-sbom` is forward-declared
-  (OAP spec 203) and deliberately absent, not stubbed.
+  (now carrying `--sbom-dir`, OAP spec 203 FR-003, which folds the SBOM binding
+  check into the certificate verify rather than a separate verb) and
+  `verify-provenance` are implemented; the standalone `verify-sbom` verb stays
+  deliberately absent (its function is subsumed by `--sbom-dir`), not stubbed.
 - `npm/`: the prebuilt-binary distribution shim (launcher + platform resolver +
   publish-time platform-package generator + its unit test and smoke test). A
   faithful mirror of spec-spine's `npm/`.

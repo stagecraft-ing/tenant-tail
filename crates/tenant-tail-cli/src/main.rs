@@ -40,8 +40,9 @@ struct Cli {
 enum Command {
     /// Verify a governance certificate by re-deriving hashes, checking proof
     /// chain integrity (spec 102 FR-007), adjudicating the platform seal
-    /// (spec 198 FR-014), and checking the corpus binding by reference
-    /// (spec 218 FR-003).
+    /// (spec 198 FR-014), checking the corpus binding by reference
+    /// (spec 218 FR-003), and checking the SBOM artifact binding by re-hashing
+    /// the on-disk BOM + audit artifacts (spec 203 FR-003).
     VerifyCertificate(VerifyCertificateArgs),
     /// Re-check claim provenance for a produced app (spec 121). Read-only: the
     /// markdown report is written to stdout, never into the audited project.
@@ -74,6 +75,15 @@ struct VerifyCertificateArgs {
     /// is reported "present-but-unverified" and an absent one "unbound".
     #[arg(long)]
     corpus_attestation: Option<PathBuf>,
+
+    /// Directory of the produced application, used to re-hash its CycloneDX
+    /// BOM (`.factory/sbom.cdx.json`) and dependency-audit artifact
+    /// (`.factory/audit.json`) against the certificate's SBOM artifact
+    /// binding (spec 203 FR-003). The verifier never regenerates the BOM.
+    /// Absent: a present binding is reported "present-but-unverified" and an
+    /// absent one "unbound".
+    #[arg(long)]
+    sbom_dir: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -145,6 +155,7 @@ fn verify_certificate_cmd(args: VerifyCertificateArgs) -> ExitCode {
         jwks.as_ref(),
         args.require_sealed,
         corpus_attestation.as_deref(),
+        args.sbom_dir.as_deref(),
     );
 
     for notice in &result.notices {
