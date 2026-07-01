@@ -123,6 +123,15 @@ pub struct GovernanceCertificate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corpus_binding: Option<CorpusBinding>,
 
+    /// Spec 203 FR-003 -- the produced application's CycloneDX BOM + audit
+    /// artifact content binding, by hash. Additive and optional: absence is a
+    /// named "unbound" state, not a failure. Inside the hash + signature (a
+    /// normal cert field, unlike `platform_countersign`); skipped when absent
+    /// so unbound certificates serialise byte-identically to pre-binding
+    /// payloads. See [`SbomArtifactBinding`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sbom_artifact_binding: Option<SbomArtifactBinding>,
+
     /// SHA-256 of the canonical JSON of this certificate with `certificate_hash`
     /// AND `cert_signature` set to empty string. Content-binding fingerprint
     /// inside the signed payload -- not the authoritative provenance check
@@ -189,6 +198,31 @@ pub struct PlatformCountersign {
 pub struct CorpusBinding {
     pub corpus_attestation_hash: String,
     pub spec_spine_version: String,
+}
+
+/// Spec 203 FR-003 -- the produced application's BOM + dependency-audit
+/// content binding, recorded by hash. `bom_hash` is the SHA-256 of the
+/// CycloneDX BOM (`.factory/sbom.cdx.json`); `audit_hash` is the SHA-256 of
+/// the dependency-audit artifact (`.factory/audit.json`); `bom_tool_version`
+/// is the `@cyclonedx/cyclonedx-npm` semver used to generate the BOM.
+///
+/// Additive and optional: a certificate without this block is a named
+/// "unbound" state, not a failure (mirrors [`CorpusBinding`], spec 218 FR-004
+/// posture). `skip_serializing_if = "Option::is_none"` keeps unbound
+/// certificates byte-identical to pre-binding payloads, so their certificate
+/// hash is unchanged. When present the block is INSIDE the hash and
+/// signature (a normal cert field, unlike `platform_countersign`).
+///
+/// The cert builder is GIVEN both hashes and never recomputes the BOM (an
+/// OAP-side boundary, spec 218's "read, never recompute" discipline). The
+/// verifier re-hashes the on-disk artifacts under `--sbom-dir` and compares;
+/// it never regenerates the BOM. See [`adjudicate_sbom_binding_state`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SbomArtifactBinding {
+    pub bom_hash: String,
+    pub audit_hash: String,
+    pub bom_tool_version: String,
 }
 
 /// Spec 198 FR-013(c) -- one override of admitted factory content the run
@@ -673,12 +707,19 @@ pub fn verify_certificate(
 /// (claimed hash == SHA-256 of the supplied attestation); the attestation's own
 /// truth is delegated to spec-spine's `verify-attestation`, never performed
 /// here. See [`adjudicate_corpus_binding_state`] for the four legible states.
+///
+/// Spec 203 FR-003 -- after the corpus binding, the SBOM artifact binding is
+/// adjudicated by re-hashing the on-disk artifacts: `sbom_dir` is the produced
+/// application's root (if supplied), under which `.factory/sbom.cdx.json` and
+/// `.factory/audit.json` are read and hashed. The cert crate never regenerates
+/// the BOM. See [`adjudicate_sbom_binding_state`] for the legible states.
 pub fn verify_certificate_with_platform(
     cert: &GovernanceCertificate,
     artifact_dir: Option<&Path>,
     platform_jwks: Option<&crate::platform_jws::PlatformJwks>,
     require_sealed: bool,
     corpus_attestation: Option<&[u8]>,
+    sbom_dir: Option<&Path>,
 ) -> VerificationResult {
     let mut result = verify_certificate(cert, artifact_dir);
 
@@ -756,6 +797,10 @@ pub fn verify_certificate_with_platform(
 
     // Spec 218 FR-003/FR-004 -- adjudicate the corpus binding by reference.
     append_corpus_binding_findings(cert, corpus_attestation, &mut result);
+
+    // Spec 203 FR-003 -- adjudicate the SBOM artifact binding by re-hashing
+    // the on-disk BOM + audit artifacts.
+    append_sbom_binding_findings(cert, sbom_dir, &mut result);
 
     result.valid = result.errors.is_empty();
     result
@@ -845,6 +890,156 @@ fn append_corpus_binding_findings(
             result.errors.push(format!(
                 "corpus binding MISMATCH: certificate claims corpus_attestation_hash {claimed} \
                  but the supplied attestation hashes to {actual} (spec 218 FR-004)"
+            ));
+        }
+    }
+}
+
+// ── SBOM artifact binding adjudication (spec 203 FR-003) ─────────────
+
+/// Spec 203 FR-003 -- relative path of the produced app's CycloneDX BOM,
+/// under the produced-app root supplied via `--sbom-dir`.
+pub const SBOM_BOM_RELPATH: &str = ".factory/sbom.cdx.json";
+
+/// Spec 203 FR-003 -- relative path of the produced app's dependency-audit
+/// artifact, under the produced-app root supplied via `--sbom-dir`.
+pub const SBOM_AUDIT_RELPATH: &str = ".factory/audit.json";
+
+/// Spec 203 FR-003 -- the adjudicated state of a certificate's SBOM artifact
+/// binding. Mirrors [`CorpusBindingState`]: every state is legible. The
+/// `BomMismatch`, `AuditMismatch`, and `Unreadable` variants are the only
+/// failing states; `Unbound` and `PresentButUnverified` are
+/// visible-but-non-fatal, consistent with the additive, optional-on-land
+/// posture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SbomBindingState {
+    /// No `sbom_artifact_binding` on the certificate. Additive, non-breaking.
+    Unbound,
+    /// Binding present, but no `--sbom-dir` was supplied to check the artifacts.
+    PresentButUnverified,
+    /// Binding present and both on-disk artifacts hash to the claimed values.
+    Verified,
+    /// Binding present and the on-disk BOM does not match the claimed hash.
+    BomMismatch { claimed: String, actual: String },
+    /// Binding present and the on-disk audit artifact does not match the
+    /// claimed hash.
+    AuditMismatch { claimed: String, actual: String },
+    /// Binding present, `--sbom-dir` supplied, but a required artifact file
+    /// could not be read (missing or otherwise unreadable).
+    Unreadable { path: String, error: String },
+}
+
+/// Spec 203 FR-003 -- the pure link check. Re-hashes the on-disk BOM
+/// (`<sbom_dir>/.factory/sbom.cdx.json`) and audit artifact
+/// (`<sbom_dir>/.factory/audit.json`) and compares against the certificate's
+/// claimed hashes, WITHOUT regenerating the BOM. Mirrors
+/// `adjudicate_corpus_binding_state`'s by-reference posture: this checks
+/// content identity only.
+pub fn adjudicate_sbom_binding_state(
+    binding: Option<&SbomArtifactBinding>,
+    sbom_dir: Option<&Path>,
+) -> SbomBindingState {
+    let (binding, dir) = match (binding, sbom_dir) {
+        (None, _) => return SbomBindingState::Unbound,
+        (Some(_), None) => return SbomBindingState::PresentButUnverified,
+        (Some(binding), Some(dir)) => (binding, dir),
+    };
+
+    let bom_path = dir.join(SBOM_BOM_RELPATH);
+    let bom_bytes = match std::fs::read(&bom_path) {
+        Ok(b) => b,
+        Err(e) => {
+            return SbomBindingState::Unreadable {
+                path: bom_path.display().to_string(),
+                error: e.to_string(),
+            };
+        }
+    };
+    let bom_hash = sha256_bytes(&bom_bytes);
+    if bom_hash != binding.bom_hash {
+        return SbomBindingState::BomMismatch {
+            claimed: binding.bom_hash.clone(),
+            actual: bom_hash,
+        };
+    }
+
+    let audit_path = dir.join(SBOM_AUDIT_RELPATH);
+    let audit_bytes = match std::fs::read(&audit_path) {
+        Ok(b) => b,
+        Err(e) => {
+            return SbomBindingState::Unreadable {
+                path: audit_path.display().to_string(),
+                error: e.to_string(),
+            };
+        }
+    };
+    let audit_hash = sha256_bytes(&audit_bytes);
+    if audit_hash != binding.audit_hash {
+        return SbomBindingState::AuditMismatch {
+            claimed: binding.audit_hash.clone(),
+            actual: audit_hash,
+        };
+    }
+
+    SbomBindingState::Verified
+}
+
+/// Map the adjudicated [`SbomBindingState`] onto the result's notices/errors.
+/// `BomMismatch`, `AuditMismatch`, and `Unreadable` are fatal; the rest are
+/// visible notices (spec 203 FR-003, skip-as-pass forbidden).
+fn append_sbom_binding_findings(
+    cert: &GovernanceCertificate,
+    sbom_dir: Option<&Path>,
+    result: &mut VerificationResult,
+) {
+    match adjudicate_sbom_binding_state(cert.sbom_artifact_binding.as_ref(), sbom_dir) {
+        SbomBindingState::Unbound => {
+            result.notices.push(
+                "certificate is sbom-UNBOUND: no sbom_artifact_binding present -- the run is not \
+                 bound by hash to a CycloneDX BOM or dependency-audit artifact (spec 203 FR-003)"
+                    .into(),
+            );
+        }
+        SbomBindingState::PresentButUnverified => {
+            // `sbom_artifact_binding` is Some in this state.
+            let binding = cert
+                .sbom_artifact_binding
+                .as_ref()
+                .expect("binding present");
+            result.notices.push(format!(
+                "sbom artifact binding present-but-UNVERIFIED: certificate claims bomHash {} / \
+                 auditHash {} (bom tool {}) but no --sbom-dir was supplied to check the \
+                 artifacts (spec 203 FR-003)",
+                binding.bom_hash, binding.audit_hash, binding.bom_tool_version
+            ));
+        }
+        SbomBindingState::Verified => {
+            let binding = cert
+                .sbom_artifact_binding
+                .as_ref()
+                .expect("binding present");
+            result.notices.push(format!(
+                "sbom artifact binding VERIFIED: on-disk {SBOM_BOM_RELPATH} and \
+                 {SBOM_AUDIT_RELPATH} hash to the claimed values (bom tool {})",
+                binding.bom_tool_version
+            ));
+        }
+        SbomBindingState::BomMismatch { claimed, actual } => {
+            result.errors.push(format!(
+                "sbom binding MISMATCH: certificate claims bomHash {claimed} but \
+                 {SBOM_BOM_RELPATH} hashes to {actual} (spec 203 FR-003)"
+            ));
+        }
+        SbomBindingState::AuditMismatch { claimed, actual } => {
+            result.errors.push(format!(
+                "sbom binding MISMATCH: certificate claims auditHash {claimed} but \
+                 {SBOM_AUDIT_RELPATH} hashes to {actual} (spec 203 FR-003)"
+            ));
+        }
+        SbomBindingState::Unreadable { path, error } => {
+            result.errors.push(format!(
+                "sbom artifact binding present but {path} could not be read: {error} \
+                 (spec 203 FR-003)"
             ));
         }
     }
@@ -1039,5 +1234,255 @@ mod tests {
         let serialised = serde_json::to_string(&binding).expect("binding serialises");
         assert!(serialised.contains("corpusAttestationHash"));
         assert!(serialised.contains("specSpineVersion"));
+    }
+
+    // ── Tests: SBOM artifact binding adjudication (spec 203 FR-003) ───
+
+    fn sbom_binding_for(bom: &[u8], audit: &[u8]) -> SbomArtifactBinding {
+        SbomArtifactBinding {
+            bom_hash: sha256_bytes(bom),
+            audit_hash: sha256_bytes(audit),
+            bom_tool_version: "4.0.0".to_string(),
+        }
+    }
+
+    #[test]
+    fn sbom_binding_absent_is_unbound() {
+        // No binding, with or without a supplied sbom dir, is "unbound".
+        assert_eq!(
+            adjudicate_sbom_binding_state(None, None),
+            SbomBindingState::Unbound
+        );
+        let tmp = tempfile::tempdir().expect("tempdir");
+        assert_eq!(
+            adjudicate_sbom_binding_state(None, Some(tmp.path())),
+            SbomBindingState::Unbound
+        );
+    }
+
+    #[test]
+    fn sbom_binding_present_no_dir_is_present_but_unverified() {
+        let binding = sbom_binding_for(b"bom-bytes", b"audit-bytes");
+        assert_eq!(
+            adjudicate_sbom_binding_state(Some(&binding), None),
+            SbomBindingState::PresentButUnverified
+        );
+    }
+
+    #[test]
+    fn sbom_binding_matching_artifacts_is_verified() {
+        let bom = b"cyclonedx-bom-bytes";
+        let audit = b"npm-audit-bytes";
+        let binding = sbom_binding_for(bom, audit);
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tmp.path().join(".factory")).unwrap();
+        std::fs::write(tmp.path().join(SBOM_BOM_RELPATH), bom).unwrap();
+        std::fs::write(tmp.path().join(SBOM_AUDIT_RELPATH), audit).unwrap();
+
+        assert_eq!(
+            adjudicate_sbom_binding_state(Some(&binding), Some(tmp.path())),
+            SbomBindingState::Verified
+        );
+    }
+
+    #[test]
+    fn sbom_binding_tampered_bom_is_bom_mismatch() {
+        let bom = b"cyclonedx-bom-bytes";
+        let audit = b"npm-audit-bytes";
+        let binding = sbom_binding_for(bom, audit);
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tmp.path().join(".factory")).unwrap();
+        // Tamper the BOM: on-disk bytes no longer match what the binding was
+        // computed over.
+        std::fs::write(tmp.path().join(SBOM_BOM_RELPATH), b"TAMPERED BOM CONTENT").unwrap();
+        std::fs::write(tmp.path().join(SBOM_AUDIT_RELPATH), audit).unwrap();
+
+        let state = adjudicate_sbom_binding_state(Some(&binding), Some(tmp.path()));
+        match state {
+            SbomBindingState::BomMismatch { claimed, actual } => {
+                assert_eq!(claimed, binding.bom_hash);
+                assert_ne!(claimed, actual, "the whole point is they differ");
+            }
+            other => panic!("expected BomMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sbom_binding_tampered_audit_is_audit_mismatch() {
+        let bom = b"cyclonedx-bom-bytes";
+        let audit = b"npm-audit-bytes";
+        let binding = sbom_binding_for(bom, audit);
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tmp.path().join(".factory")).unwrap();
+        std::fs::write(tmp.path().join(SBOM_BOM_RELPATH), bom).unwrap();
+        std::fs::write(
+            tmp.path().join(SBOM_AUDIT_RELPATH),
+            b"TAMPERED AUDIT CONTENT",
+        )
+        .unwrap();
+
+        let state = adjudicate_sbom_binding_state(Some(&binding), Some(tmp.path()));
+        match state {
+            SbomBindingState::AuditMismatch { claimed, actual } => {
+                assert_eq!(claimed, binding.audit_hash);
+                assert_ne!(claimed, actual, "the whole point is they differ");
+            }
+            other => panic!("expected AuditMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sbom_binding_missing_artifact_is_unreadable() {
+        let binding = sbom_binding_for(b"bom", b"audit");
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // Empty tempdir: neither .factory artifact exists on disk.
+        let state = adjudicate_sbom_binding_state(Some(&binding), Some(tmp.path()));
+        match state {
+            SbomBindingState::Unreadable { path, .. } => {
+                assert!(path.ends_with("sbom.cdx.json"), "path: {path}");
+            }
+            other => panic!("expected Unreadable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sbom_binding_is_omitted_when_absent() {
+        // FR-003: an unbound certificate serialises with no
+        // `sbomArtifactBinding` key, so its canonical JSON (and hence its
+        // hash) is byte-identical to a pre-binding payload.
+        let binding = sbom_binding_for(b"x", b"y");
+        let serialised = serde_json::to_string(&binding).expect("binding serialises");
+        assert!(serialised.contains("bomHash"));
+        assert!(serialised.contains("auditHash"));
+        assert!(serialised.contains("bomToolVersion"));
+    }
+
+    // ── Tests: SBOM findings through `verify_certificate_with_platform`'s
+    // internal hook (spec 203 FR-003) ──────────────────────────────────
+    //
+    // tenant-tail links no signing key material (it is verify-only), so a
+    // minimal struct literal stands in for a builder-minted certificate; only
+    // the sbom-binding findings are under test here. The signature/self-hash
+    // chain over a real OAP-minted certificate is covered separately by
+    // `tests/certificate_parity.rs`.
+
+    fn minimal_cert(sbom_artifact_binding: Option<SbomArtifactBinding>) -> GovernanceCertificate {
+        GovernanceCertificate {
+            certificate_version: CERTIFICATE_VERSION.to_string(),
+            pipeline_run_id: "test-run".to_string(),
+            timestamp: Utc::now(),
+            status: CertificateStatus::Complete,
+            intent: IntentRecord {
+                requirements_hash: String::new(),
+                spec_id: None,
+                spec_hash: None,
+            },
+            build_spec: BuildSpecRecord {
+                hash: String::new(),
+                approval_record: None,
+            },
+            stages: Vec::new(),
+            verification: VerificationRecord {
+                compile: VerificationOutcome::Skipped,
+                test: VerificationOutcome::Skipped,
+                lint: VerificationOutcome::Skipped,
+                typecheck: VerificationOutcome::Skipped,
+                security_scan: VerificationOutcome::Skipped,
+            },
+            proof_chain: ProofChainSummary {
+                record_count: 0,
+                first_record_hash: None,
+                last_record_hash: None,
+                chain_integrity: ChainIntegrity::Empty,
+            },
+            compliance: None,
+            signer: None,
+            inter_stage_chain: None,
+            admitted_envelope_hash: None,
+            goal_id: None,
+            intent_capsule_hash: None,
+            consumed_overrides: Vec::new(),
+            corpus_binding: None,
+            sbom_artifact_binding,
+            certificate_hash: String::new(),
+            signing_public_key: String::new(),
+            cert_signature: String::new(),
+            signing_attestation: SigningAttestation::default(),
+            platform_countersign: None,
+        }
+    }
+
+    fn empty_result() -> VerificationResult {
+        VerificationResult {
+            valid: true,
+            errors: Vec::new(),
+            notices: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn sbom_findings_unbound_cert_is_notice_not_error() {
+        let cert = minimal_cert(None);
+        let mut result = empty_result();
+        append_sbom_binding_findings(&cert, None, &mut result);
+        assert!(result.errors.is_empty(), "unbound must not error");
+        assert!(
+            result.notices.iter().any(|n| n.contains("sbom-UNBOUND")),
+            "expected an unbound notice: {:?}",
+            result.notices
+        );
+    }
+
+    #[test]
+    fn sbom_findings_matching_artifacts_pass_with_sbom_dir() {
+        let bom = b"cyclonedx-bom-bytes";
+        let audit = b"npm-audit-bytes";
+        let binding = sbom_binding_for(bom, audit);
+        let cert = minimal_cert(Some(binding));
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tmp.path().join(".factory")).unwrap();
+        std::fs::write(tmp.path().join(SBOM_BOM_RELPATH), bom).unwrap();
+        std::fs::write(tmp.path().join(SBOM_AUDIT_RELPATH), audit).unwrap();
+
+        let mut result = empty_result();
+        append_sbom_binding_findings(&cert, Some(tmp.path()), &mut result);
+        assert!(
+            result.errors.is_empty(),
+            "matching artifacts must not error: {:?}",
+            result.errors
+        );
+        assert!(
+            result.notices.iter().any(|n| n.contains("VERIFIED")),
+            "expected a verified notice: {:?}",
+            result.notices
+        );
+    }
+
+    #[test]
+    fn sbom_findings_tampered_bom_fails_with_bom_mismatch_finding() {
+        let bom = b"cyclonedx-bom-bytes";
+        let audit = b"npm-audit-bytes";
+        let binding = sbom_binding_for(bom, audit);
+        let cert = minimal_cert(Some(binding));
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tmp.path().join(".factory")).unwrap();
+        std::fs::write(tmp.path().join(SBOM_BOM_RELPATH), b"TAMPERED BOM").unwrap();
+        std::fs::write(tmp.path().join(SBOM_AUDIT_RELPATH), audit).unwrap();
+
+        let mut result = empty_result();
+        append_sbom_binding_findings(&cert, Some(tmp.path()), &mut result);
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("sbom binding MISMATCH") && e.contains("bomHash")),
+            "expected a bom-mismatch error: {:?}",
+            result.errors
+        );
     }
 }

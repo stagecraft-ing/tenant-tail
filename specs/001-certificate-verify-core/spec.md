@@ -22,6 +22,7 @@ establishes:
   - { kind: file, path: "crates/tenant-tail-core/src/certificate.rs" }
   - { kind: file, path: "crates/tenant-tail-core/src/inter_stage_manifest.rs" }
   - { kind: file, path: "crates/tenant-tail-core/src/platform_jws.rs" }
+  - { kind: file, path: "crates/tenant-tail-core/src/lib.rs" }
   - { kind: file, path: "crates/tenant-tail-core/tests/certificate_parity.rs" }
   - { kind: directory, path: "crates/tenant-tail-core/tests/fixtures/cert-run" }
 references:
@@ -40,9 +41,12 @@ relicensed Apache-2.0.
 
 ## 2. Territory
 
-- `crates/tenant-tail-core/src/certificate.rs`: the certificate data types and
-  the verify functions (`verify_certificate`, `verify_certificate_with_platform`,
-  `compute_certificate_hash`, the Ed25519 signature check).
+- `crates/tenant-tail-core/src/certificate.rs`: the certificate data types
+  (including the additive `CorpusBinding` and `SbomArtifactBinding`, byte-identical
+  to the emitter's) and the verify functions (`verify_certificate`,
+  `verify_certificate_with_platform`, `compute_certificate_hash`, the Ed25519
+  signature check, and the corpus/SBOM binding adjudicators
+  `adjudicate_corpus_binding_state` / `adjudicate_sbom_binding_state`).
 - `crates/tenant-tail-core/src/inter_stage_manifest.rs`: the inter-stage
   manifest types and `verify_manifest` (replayed by the certificate verifier).
 - `crates/tenant-tail-core/src/platform_jws.rs`: compact-JWS verification for
@@ -74,6 +78,16 @@ relicensed Apache-2.0.
   `verified` are visible notices with exit 0; only a hash `mismatch` is an error.
   The field is additive and optional, so an unbound certificate serialises
   byte-identically to a pre-binding payload and the parity fixture is unaffected.
+- The SBOM artifact binding (spec 203) is adjudicated by reference, never by
+  recompute. When the certificate carries a `sbomArtifactBinding`, the claimed
+  `bomHash` and `auditHash` are re-derived by SHA-256 over the on-disk
+  `<root>/.factory/{sbom.cdx.json,audit.json}` supplied via `--sbom-dir` and
+  compared; the BOM is never regenerated. The states mirror the corpus binding's
+  legible, never-skip-as-pass model (`adjudicate_sbom_binding_state`): `unbound`,
+  `present-but-unverified` (binding, no `--sbom-dir`), and `verified` are visible
+  notices, while a `bom`/`audit` hash mismatch or an unreadable artifact is an
+  error. The field is additive and optional, so an unbound certificate serialises
+  byte-identically and the parity fixture is unaffected.
 - Behavior parity: a certificate emitted by OAP's in-tree emitter MUST verify
   here unchanged (the parity test is the gate).
 
