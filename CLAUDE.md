@@ -20,8 +20,10 @@ The verbs (see `crates/tenant-tail-cli/src/main.rs`):
   the certificate self-hash, checks the Ed25519 signature (the authoritative provenance
   check, FR-008.4), optionally re-derives stage artifact hashes (`--artifact-dir`),
   replays the inter-stage manifest chain, and adjudicates the optional platform
-  countersign against a saved JWKS (`--platform-jwks`; `--require-sealed` fails closed
-  on an unsealed/unadjudicated seal).
+  countersign against a saved JWKS (`--platform-jwks`). Sealing is required by
+  default: an unsealed or unadjudicated certificate exits 1; `--allow-unsealed`
+  opts out, demoting it to a visible notice (the deprecated `--require-sealed`,
+  now the default, is accepted as a no-op).
 - `verify-provenance --project <dir>` -- the claim-provenance audit (`audit()` over the
   pure `validate()`). The markdown report goes to **stdout** (never written into the
   audited project); `--corpus` overrides the corpus path; `--fail-on-rejected` exits 1

@@ -730,15 +730,21 @@ pub fn verify_certificate(
 /// Spec 198 FR-014/AC-4 -- full verification including the platform seal.
 ///
 /// Runs [`verify_certificate`] (the producer-untrusted offline chain,
-/// unchanged), then adjudicates the countersign:
+/// unchanged), then adjudicates the countersign. The platform seal is what
+/// binds the run to its admission contract, so the trust-nobody posture fails
+/// closed on its absence: `require_sealed` is the default (the CLI sets it from
+/// `!--allow-unsealed`), and only an explicit opt-out demotes an unbindable
+/// seal to a notice.
 ///
-/// - **Unsealed** (`platform_countersign: None`): a notice is emitted --
-///   "verifiable-but-unsealed". Fails only under `require_sealed`.
+/// - **Unsealed** (`platform_countersign: None`): an error under
+///   `require_sealed` (the default); a "verifiable-but-unsealed" notice only
+///   when `require_sealed` is false.
 /// - **Sealed + JWKS provided**: the countersign JWS must verify against
 ///   the keyset and its claims must bind this certificate's hash and run
-///   id; any failure is an error.
-/// - **Sealed + no JWKS**: the seal cannot be adjudicated -- a notice under
-///   the default posture, an error under `require_sealed` (fail closed).
+///   id; any failure is an error. Unaffected by `require_sealed`.
+/// - **Sealed + no JWKS**: the seal cannot be adjudicated -- an error under
+///   `require_sealed` (the default, fail closed); a notice only when
+///   `require_sealed` is false.
 ///
 /// Spec 218 FR-003/FR-004 -- after the platform seal, the corpus binding is
 /// adjudicated by reference: `corpus_attestation` is the bytes of a supplied
@@ -766,14 +772,17 @@ pub fn verify_certificate_with_platform(
         (None, _) => {
             if require_sealed {
                 result.errors.push(
-                    "certificate is verifiable-but-UNSEALED (no platform countersign) -- \
-                     rejected under --require-sealed (spec 198 FR-014)"
+                    "certificate is verifiable-but-UNSEALED (no platform countersign): the \
+                     offline chain holds but nothing binds this run to its admission contract -- \
+                     rejected by default (spec 198 FR-014); pass --allow-unsealed to accept an \
+                     unsealed certificate"
                         .into(),
                 );
             } else {
                 result.notices.push(
                     "certificate is verifiable-but-UNSEALED: the offline chain holds, but no \
-                     platform countersign binds this run to its admission contract (spec 198 FR-014)"
+                     platform countersign binds this run to its admission contract; accepted \
+                     under --allow-unsealed (spec 198 FR-014)"
                         .into(),
                 );
             }
@@ -848,14 +857,14 @@ pub fn verify_certificate_with_platform(
             if require_sealed {
                 result.errors.push(
                     "certificate carries a platform countersign but no JWKS was provided to \
-                     verify it -- supply --platform-jwks <file> or --jwks-url (fail-closed under \
-                     --require-sealed)"
+                     verify it -- supply --platform-jwks <file> (rejected by default; pass \
+                     --allow-unsealed to accept an unadjudicated seal) (spec 198 FR-014)"
                         .into(),
                 );
             } else {
                 result.notices.push(
-                    "certificate carries a platform countersign, NOT verified (no JWKS provided \
-                     -- supply --platform-jwks <file> or --jwks-url)"
+                    "certificate carries a platform countersign, NOT verified (no JWKS provided; \
+                     supply --platform-jwks <file>); accepted under --allow-unsealed"
                         .into(),
                 );
             }

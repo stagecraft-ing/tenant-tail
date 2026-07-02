@@ -79,10 +79,14 @@ fn missing_brd_under_fail_on_rejected_is_exit_1() {
 }
 
 #[test]
-fn valid_certificate_verifies_with_headline_on_stdout_exit_0() {
+fn unsealed_certificate_with_allow_unsealed_verifies_exit_0() {
+    // The parity fixture carries no platform countersign. --allow-unsealed opts
+    // out of the default sealed requirement, so the offline chain verifies and
+    // the unsealed state is a visible notice, not a failure.
     let out = Command::new(bin())
         .arg("verify-certificate")
         .arg(cert_fixture())
+        .arg("--allow-unsealed")
         .output()
         .expect("spawn");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
@@ -90,6 +94,30 @@ fn valid_certificate_verifies_with_headline_on_stdout_exit_0() {
         stdout(&out).contains("VERIFIED"),
         "verdict headline should be on stdout; stdout: {}",
         stdout(&out)
+    );
+}
+
+#[test]
+fn unsealed_certificate_is_rejected_by_default_exit_1() {
+    // Trust-nobody posture (spec 198 FR-014): an unsealed certificate fails
+    // closed by default. The offline chain still holds, but the missing platform
+    // countersign is now an error, not a notice, so the verb exits 1 and the
+    // INVALID headline is on stdout with the reason on stderr.
+    let out = Command::new(bin())
+        .arg("verify-certificate")
+        .arg(cert_fixture())
+        .output()
+        .expect("spawn");
+    assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
+    assert!(
+        stdout(&out).contains("INVALID"),
+        "verdict headline should be on stdout; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("UNSEALED"),
+        "the rejection reason should name the unsealed state; stderr: {}",
+        stderr(&out)
     );
 }
 

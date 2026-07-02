@@ -58,6 +58,6 @@
     "summary": "The governance-certificate verify engine, extracted verify-only from OAP's factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the certificate self-hash, verifies the Ed25519 engine signature, re-checks stage artifact hashes against files on disk, replays the signed inter-stage manifest chain, adjudicates the optional platform countersign offline, and checks the optional corpus binding by reference (spec 218). The emitter (builder, signing-key handling, generation) is excluded by construction; the one spec-spine seam is feature-gated OFF so the vended build links no spec-spine crate.\n",
     "title": "Certificate verify core (offline governance-certificate verification)"
   },
-  "shardHash": "24df85fd376b3ac74dd00d6a641e083b9b93a90eab94cbc10074043150f3a1a9",
+  "shardHash": "88c2df16ff42d798b862b2b618baa170e43d18781db63fe1e1311f5684f416d0",
   "specVersion": "1.1.0"
 }

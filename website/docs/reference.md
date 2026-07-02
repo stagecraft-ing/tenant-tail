@@ -9,7 +9,7 @@ sidebar_position: 6
 ## Exit Codes
 
 - `0`: Verified successfully.
-- `1`: Verification failed, or a fail-closed flag fired (e.g., `--require-sealed` or `--fail-on-rejected`).
+- `1`: Verification failed (e.g., an unsealed certificate under the default sealed requirement), or a fail-closed flag fired (e.g., `--fail-on-rejected`).
 - `2`: Usage or I/O error (e.g., unreadable or invalid input file).
 
 ## Error Messages and Diagnostics

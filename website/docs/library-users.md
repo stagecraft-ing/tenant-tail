@@ -54,8 +54,9 @@ let result = verify_certificate_with_platform(
     &cert,
     Some(artifact_dir_path),
     Some(&jwks),
-    true, // require_sealed
-    Some(corpus_attestation_bytes)
+    true, // require_sealed (the CLI default; pass false for --allow-unsealed)
+    Some(corpus_attestation_bytes),
+    None, // sbom_dir
 );
 ```
 

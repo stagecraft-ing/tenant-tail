@@ -65,9 +65,14 @@ relicensed Apache-2.0.
   MUST be re-derived from the file on disk and compared (spec 102 FR-005).
 - A present inter-stage chain MUST replay against the embedded run key chain;
   a tampered or cross-run manifest MUST surface as a distinct error.
-- An absent platform countersign is `verifiable-but-unsealed`: a visible notice,
-  exit 0, never silently equivalent to sealed. `--require-sealed` promotes it to
-  an error.
+- A platform countersign that cannot be verified fails closed by default. The
+  countersign is what binds the run to its admission contract, so the trust-nobody
+  posture MUST reject (exit 1) a certificate that carries none, or that carries one
+  with no JWKS supplied to adjudicate it. `--allow-unsealed` opts out, demoting the
+  rejection to a visible `verifiable-but-unsealed` notice (exit 0) that is never
+  silently equivalent to sealed. The offline chain is verified either way; only the
+  seal verdict differs. (The deprecated `--require-sealed`, now the default, is
+  accepted as a no-op.)
 - The corpus binding (spec 218) is adjudicated by reference, never by recompute.
   When the certificate carries a `corpusBinding`, the claimed
   `corpusAttestationHash` is checked against the SHA-256 of a supplied
