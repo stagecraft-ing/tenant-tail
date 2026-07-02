@@ -28,7 +28,14 @@ on:
   # failed or absent review blocks merge; green ci-gate => actually reviewed or
   # visibly skipped). It does NOT trigger standalone on `pull_request` (that
   # would double-run it).
+  #
+  # secrets.CLAUDE_CODE_OAUTH_TOKEN is declared here so the caller can forward
+  # just this one secret explicitly (least privilege) instead of `secrets:
+  # inherit`, which would leak the whole repo secret set into this job.
   workflow_call:
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: true
   workflow_dispatch:
 
 permissions:
@@ -103,11 +110,17 @@ jobs:
           #   - secret unset (handled above) -> hard fail (config bug).
           #   - auth / permission error -> hard fail: a broken token must be
           #     fixed, not masked (preserves the anti-silent-green guard).
-          #   - anything else (overloaded_error, rate_limit_error, 5xx,
-          #     timeout, network, unclassified) -> PASS, with a LOUD
-          #     ::warning:: and a PR notice, so a third-party API incident rides
-          #     through instead of red-gating every PR. The pass is visible (a
-          #     comment is posted), never silent.
+          #   - a SPECIFICALLY-identified transient outage signature (rate
+          #     limit, 5xx, or a network/timeout error) -> PASS, with a LOUD
+          #     ::warning:: and a PR notice, so a third-party API incident
+          #     rides through instead of red-gating every PR. The pass is
+          #     visible (a comment is posted), never silent.
+          #   - anything else (unclassified) -> hard fail. Fail-closed
+          #     rationale: an error we cannot positively identify as a known
+          #     transient outage might be a persistent, review-defeating bug
+          #     (e.g. a CLI regression or a misclassified config problem); the
+          #     anti-silent-green guard means "we could not tell" must block
+          #     merge, not wave it through.
           if claude -p "$PROMPT" --output-format text < /tmp/pr-diff.txt > /tmp/review.md 2> /tmp/review.err; then
             echo "review_status=ok" >> "$GITHUB_OUTPUT"
           else
@@ -117,6 +130,16 @@ jobs:
             printf '%s\n' "$err" >&2
             if printf '%s' "$err" | grep -qiE 'authentication_error|permission_error|invalid[^a-z]*(x-)?api[^a-z]*key|unauthorized|forbidden|oauth[^a-z]*(token)?[^a-z]*(invalid|expired|revoked|missing)'; then
               echo "::error::AI review could not authenticate (not an API outage); fix CLAUDE_CODE_OAUTH_TOKEN. Details above."
+              exit 1
+            fi
+            # Allowlist, not a blocklist: only these three specifically-named
+            # transient signatures pass ci-gate. Everything else falls through
+            # to the fail-closed branch below.
+            transient='rate_limit_error|rate limit|too many requests|\b429\b'
+            transient="${transient}|overloaded_error|internal_server_error|service_unavailable_error|\b5[0-9]{2}\b|bad gateway|gateway timeout|service unavailable|internal server error"
+            transient="${transient}|\btimeout\b|timed[ _-]?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network error|socket hang[ _-]?up|fetch failed|getaddrinfo|connection reset|connection refused"
+            if ! printf '%s' "$err" | grep -qiE "$transient"; then
+              echo "::error::AI review failed with an unrecognized error (rc=${rc}); not a known transient-outage signature (rate limit / 5xx / network timeout), so failing closed instead of silently passing ci-gate. Details above."
               exit 1
             fi
             excerpt="$(printf '%s' "$err" | tr '\n\r\t' '   ' | sed 's/  */ /g' | cut -c1-280)"

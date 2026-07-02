@@ -14,7 +14,7 @@
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use chrono::{DateTime, Utc};
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -76,6 +76,10 @@ pub enum ManifestError {
         expected_to_stage: String,
         actual_to_stage: String,
     },
+    #[error(
+        "key {fingerprint} is registered under a fingerprint that is not the SHA-256 of its own public key (forged key-chain entry)"
+    )]
+    FingerprintMismatch { fingerprint: String },
     #[error("invalid key material: {0}")]
     KeyMaterial(String),
     #[error("serialization failed: {0}")]
@@ -135,6 +139,17 @@ impl RunKeyChain {
                             v.len()
                         ))
                     })?;
+                // Bind the fingerprint label to the actual key bytes: the
+                // registered `key_fingerprint` MUST be the SHA-256 of the key
+                // it labels. Without this, an attacker could register their
+                // own key under any fingerprint string and have a manifest
+                // reference that label (the fingerprint would otherwise be an
+                // unverified alias, not a commitment to the key).
+                if fingerprint_of_pubkey(&bytes) != record.key_fingerprint {
+                    return Err(ManifestError::FingerprintMismatch {
+                        fingerprint: fingerprint.to_string(),
+                    });
+                }
                 let key = VerifyingKey::from_bytes(&bytes)
                     .map_err(|e| ManifestError::KeyMaterial(format!("not Ed25519: {e}")))?;
                 return Ok((key, record.stage_id.as_str()));
@@ -163,8 +178,9 @@ pub fn fingerprint_of_pubkey(pubkey_bytes: &[u8; 32]) -> String {
 ///   2. `manifest.to_stage == expected_to_stage` when supplied (the consumer
 ///      provides its own stage id so a manifest produced for a different
 ///      receiver doesn't pass).
-///   3. The `ephemeral_key_id` resolves in the chain.
-///   4. The Ed25519 signature verifies against the canonical bytes.
+///   3. The `ephemeral_key_id` resolves in the chain AND its fingerprint is
+///      the SHA-256 of the key it labels (no aliasing a foreign key).
+///   4. The Ed25519 signature verifies (strictly) against the canonical bytes.
 pub fn verify_manifest(
     manifest: &InterStageManifest,
     key_chain: &RunKeyChain,
@@ -184,7 +200,16 @@ pub fn verify_manifest(
             actual_to_stage: manifest.to_stage.clone(),
         });
     }
-    let (verifying_key, _stage_id) =
+    // The resolved stage id is available for a producer/key binding
+    // (`from_stage == key_stage`), but that is deliberately NOT enforced here:
+    // tenant-tail ships no inter-stage chain fixture, so the exact string
+    // relationship between a manifest's `from_stage` and the stage-key
+    // registration id is unverified against a real OAP chain, and an
+    // over-strict equality check would risk false-rejecting a legitimate
+    // certificate. The check is defence-in-depth anyway (the whole chain is
+    // inside the certificate's Ed25519 signature). Revisit once a golden
+    // chain fixture exists.
+    let (verifying_key, _key_stage) =
         key_chain.resolve_fingerprint(&manifest.signer.ephemeral_key_id)?;
 
     let sig_bytes: [u8; 64] = B64
@@ -197,8 +222,9 @@ pub fn verify_manifest(
     let signature = Signature::from_bytes(&sig_bytes);
 
     let canonical = canonical_bytes_for_signing(manifest)?;
+    // `verify_strict`: reject malleable signatures and small-order keys.
     verifying_key
-        .verify(&canonical, &signature)
+        .verify_strict(&canonical, &signature)
         .map_err(|e| ManifestError::SignatureInvalid(format!("Ed25519: {e}")))
 }
 
@@ -206,4 +232,79 @@ fn canonical_bytes_for_signing(manifest: &InterStageManifest) -> Result<Vec<u8>,
     let mut clone = manifest.clone();
     clone.signature = String::new();
     serde_json::to_vec(&clone).map_err(|e| ManifestError::Serialization(format!("{e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    /// Build a run key chain plus a manifest whose s1 ephemeral key signs it,
+    /// with a fingerprint that is the true SHA-256 of that key.
+    fn signed_chain() -> (RunKeyChain, InterStageManifest, SigningKey) {
+        let key = SigningKey::from_bytes(&[5u8; 32]);
+        let vk = key.verifying_key();
+        let fp = fingerprint_of_pubkey(&vk.to_bytes());
+        let mut stage_keys = BTreeMap::new();
+        stage_keys.insert(
+            "s1".to_string(),
+            StageKeyRecord {
+                stage_id: "s1".into(),
+                ephemeral_public_key_b64: B64.encode(vk.to_bytes()),
+                key_fingerprint: fp.clone(),
+            },
+        );
+        let chain = RunKeyChain {
+            run_id: "run-1".into(),
+            root_public_key_b64: B64.encode(vk.to_bytes()),
+            stage_keys,
+        };
+        let mut m = InterStageManifest {
+            run_id: "run-1".into(),
+            from_stage: "s1".into(),
+            to_stage: "s2".into(),
+            produced_at: Utc::now(),
+            artifact_hashes: BTreeMap::new(),
+            metadata: BTreeMap::new(),
+            signer: ManifestSigner {
+                agent_id: "factory-engine/stage/s1".into(),
+                ephemeral_key_id: fp,
+            },
+            signature: String::new(),
+        };
+        let canonical = canonical_bytes_for_signing(&m).unwrap();
+        m.signature = B64.encode(key.sign(&canonical).to_bytes());
+        (chain, m, key)
+    }
+
+    #[test]
+    fn valid_manifest_verifies() {
+        let (chain, m, _k) = signed_chain();
+        assert!(verify_manifest(&m, &chain, Some("s2")).is_ok());
+    }
+
+    #[test]
+    fn forged_fingerprint_label_is_rejected() {
+        // Attacker relabels the registered key under a bogus fingerprint the
+        // manifest also references. The label is no longer the SHA-256 of the
+        // key, so resolution fails before the signature is even checked.
+        let (mut chain, mut m, _k) = signed_chain();
+        let bogus = "not-the-real-fingerprint".to_string();
+        chain.stage_keys.get_mut("s1").unwrap().key_fingerprint = bogus.clone();
+        m.signer.ephemeral_key_id = bogus;
+        assert!(matches!(
+            verify_manifest(&m, &chain, None),
+            Err(ManifestError::FingerprintMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn cross_run_manifest_is_rejected() {
+        let (chain, mut m, _k) = signed_chain();
+        m.run_id = "other-run".into();
+        assert!(matches!(
+            verify_manifest(&m, &chain, None),
+            Err(ManifestError::RunIdMismatch { .. })
+        ));
+    }
 }

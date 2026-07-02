@@ -16,6 +16,8 @@ unsupported path), and the tests.
 
 from __future__ import annotations
 
+import glob
+import os
 import platform as _platform
 import sys
 import sysconfig
@@ -103,14 +105,31 @@ def _normalize_machine(machine: str) -> str | None:
 
 def is_musl_linux() -> bool:
     """True on a musl (non-glibc) Linux. Permissive: if we cannot tell, assume
-    glibc and let resolution fail loudly later (mirrors npm's isMuslLinux)."""
+    glibc and let resolution fail loudly later (mirrors npm's isMuslLinux).
+
+    `platform.libc_ver()` returns `('', '')` on musl (it only ever recognizes
+    glibc), so an empty/non-glibc result alone is ambiguous, not proof of musl.
+    Corroborate it with a second, independent signal before concluding musl:
+    a musl-tagged sysconfig platform, a musl dynamic loader on disk, or a
+    `CS_GNU_LIBC_VERSION` value that names musl. Any single positive signal is
+    enough; genuine inability to tell falls through to the permissive `False`.
+    """
     if sys.platform != "linux":
         return False
     try:
         if "musl" in (sysconfig.get_platform() or ""):
             return True
         libc, _ver = _platform.libc_ver()
-        return libc != "" and "glibc" not in libc.lower()
+        not_glibc = "glibc" not in libc.lower()
+        if not_glibc and glob.glob("/lib/ld-musl-*"):
+            return True
+        try:
+            gnu_libc_version = os.confstr("CS_GNU_LIBC_VERSION")
+        except (AttributeError, ValueError, OSError):
+            gnu_libc_version = None
+        if gnu_libc_version and "musl" in gnu_libc_version.lower():
+            return True
+        return False
     except Exception:
         return False
 

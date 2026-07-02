@@ -30,7 +30,7 @@ jobs:
     name: build · test · clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       # rust-toolchain.toml pins the exact channel (+ rustfmt, clippy).
       - name: Show toolchain
         run: rustc --version && cargo --version
@@ -47,13 +47,13 @@ jobs:
     name: self-governance (compile · index · lint · couple)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # Full history so the coupling gate can diff the PR base SHA against
           # HEAD; the default shallow clone (fetch-depth 1) leaves the base
           # commit absent and `git diff base...HEAD` fails.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       # Root package.json pins spec-spine as a devDependency; npm ci installs it
@@ -92,15 +92,18 @@ jobs:
   # it needs PR context (number, base/head diff), so it is skipped on
   # push/merge_group/workflow_dispatch, which ci-gate treats as success.
   # Job-level pull-requests: write overrides the workflow read default (the
-  # review posts a comment); secrets: inherit passes CLAUDE_CODE_OAUTH_TOKEN.
-  # A Claude API outage passes with a visible notice (spec 177 resilience); an
-  # auth failure or unset secret still hard-fails.
+  # review posts a comment); only the one secret the reusable workflow actually
+  # consumes (CLAUDE_CODE_OAUTH_TOKEN) is forwarded, not the full repo secret
+  # set (least privilege; `secrets: inherit` would leak every other secret into
+  # this job's context). A Claude API outage passes with a visible notice
+  # (spec 177 resilience); an auth failure or unset secret still hard-fails.
   ai-review:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: write
-    secrets: inherit
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     uses: ./.github/workflows/ai-pr-review.yml
 
   # The single required status check for branch protection and the merge queue.

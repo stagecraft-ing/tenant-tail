@@ -14,7 +14,7 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 pub const TYP_ADMISSION_SEAL: &str = "oap-admission-seal+jws";
@@ -119,7 +119,9 @@ pub fn verify_compact_jws(
         .map_err(|_| JwsError::SignatureInvalid("signature length != 64".into()))?;
     let signature = Signature::from_bytes(&sig_bytes);
     let signing_input = format!("{}.{}", segments[0], segments[1]);
-    key.verify(signing_input.as_bytes(), &signature)
+    // `verify_strict`: reject malleable signatures and small-order keys so a
+    // seal/grant/countersign cannot be re-forged for the same signing input.
+    key.verify_strict(signing_input.as_bytes(), &signature)
         .map_err(|e| JwsError::SignatureInvalid(format!("Ed25519: {e}")))?;
     let payload: serde_json::Value = serde_json::from_slice(&b64url(segments[1], "payload")?)
         .map_err(|e| JwsError::Malformed(format!("payload JSON: {e}")))?;

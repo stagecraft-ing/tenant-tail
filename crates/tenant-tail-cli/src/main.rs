@@ -19,6 +19,7 @@
 //! stays read-only down to the package boundary.
 
 use clap::{Parser, Subcommand};
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use tenant_tail_core::certificate::{GovernanceCertificate, verify_certificate_with_platform};
@@ -111,6 +112,36 @@ fn main() -> ExitCode {
     }
 }
 
+/// Write `text` to stdout, tolerating a reader that closed the pipe (e.g.
+/// `tenant-tail ... | head`). Rust ignores SIGPIPE, so the default `print!`
+/// PANICS (exit 101) on a broken pipe; here a broken pipe is swallowed so the
+/// verb still returns its real verdict exit code, and any other write error
+/// maps to the exit-2 I/O convention.
+fn emit_stdout(text: &str) -> Result<(), ExitCode> {
+    match std::io::stdout().write_all(text.as_bytes()) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => {
+            eprintln!("error: cannot write to stdout: {e}");
+            Err(ExitCode::from(2))
+        }
+    }
+}
+
+/// Require that an optional `--flag <dir>` argument, when supplied, points at
+/// an existing directory. A mistyped path is a usage/I-O error (exit 2), NOT a
+/// verification failure (exit 1): the distinction keeps a path typo from
+/// masquerading as certificate tamper or a silently-empty audit.
+fn require_dir_if_present(flag: &str, path: Option<&std::path::Path>) -> Result<(), ExitCode> {
+    if let Some(p) = path
+        && !p.is_dir()
+    {
+        eprintln!("error: {flag} {} is not an existing directory", p.display());
+        return Err(ExitCode::from(2));
+    }
+    Ok(())
+}
+
 fn verify_certificate_cmd(args: VerifyCertificateArgs) -> ExitCode {
     let json = match std::fs::read_to_string(&args.certificate) {
         Ok(j) => j,
@@ -126,6 +157,15 @@ fn verify_certificate_cmd(args: VerifyCertificateArgs) -> ExitCode {
             return ExitCode::from(2);
         }
     };
+
+    // A mistyped directory is an input error (exit 2), distinct from a
+    // verification failure (exit 1): validate before the core reads under it.
+    if let Err(code) = require_dir_if_present("--artifact-dir", args.artifact_dir.as_deref()) {
+        return code;
+    }
+    if let Err(code) = require_dir_if_present("--sbom-dir", args.sbom_dir.as_deref()) {
+        return code;
+    }
 
     let jwks = match load_jwks(args.platform_jwks.as_deref()) {
         Ok(j) => j,
@@ -162,11 +202,16 @@ fn verify_certificate_cmd(args: VerifyCertificateArgs) -> ExitCode {
         eprintln!("notice: {notice}");
     }
 
+    // The one-line verdict is the machine-readable result and goes to stdout
+    // (so a consumer capturing stdout gets it); human detail goes to stderr.
     if result.valid {
-        eprintln!(
-            "governance certificate VERIFIED (pipeline: {}, status: {:?})",
+        let headline = format!(
+            "governance certificate VERIFIED (pipeline: {}, status: {:?})\n",
             cert.pipeline_run_id, cert.status
         );
+        if let Err(code) = emit_stdout(&headline) {
+            return code;
+        }
         eprintln!("  stages: {}", cert.stages.len());
         eprintln!("  proof chain records: {}", cert.proof_chain.record_count);
         if cert.certificate_hash.len() >= 16 {
@@ -182,10 +227,13 @@ fn verify_certificate_cmd(args: VerifyCertificateArgs) -> ExitCode {
         );
         ExitCode::SUCCESS
     } else {
-        eprintln!(
-            "governance certificate INVALID ({} error(s)):",
+        let headline = format!(
+            "governance certificate INVALID ({} error(s))\n",
             result.errors.len()
         );
+        if let Err(code) = emit_stdout(&headline) {
+            return code;
+        }
         for err in &result.errors {
             eprintln!("  - {err}");
         }
@@ -221,21 +269,46 @@ fn verify_provenance_cmd(args: VerifyProvenanceArgs) -> ExitCode {
         );
         return ExitCode::from(2);
     }
+    // A mistyped `--corpus` must not silently degrade to an empty corpus and a
+    // green exit: treat a missing override directory as an input error.
+    if let Err(code) = require_dir_if_present("--corpus", args.corpus.as_deref()) {
+        return code;
+    }
 
     let report = audit_with_options(&args.project, args.corpus.as_deref());
 
     // The markdown report goes to stdout (read-only: we never write into the
-    // audited project); the summary goes to stderr.
-    print!("{}", render_audit_report(&report));
+    // audited project); the summary goes to stderr. The stdout write tolerates
+    // a closed pipe rather than panicking.
+    if let Err(code) = emit_stdout(&render_audit_report(&report)) {
+        return code;
+    }
 
     let s = &report.validation.summary;
     eprintln!(
-        "provenance audit: total={} derived={} assumption={} rejected={} synthesizedCorpus={}",
-        s.total, s.derived_count, s.assumption_count, s.rejected_count, report.synthesized_corpus
+        "provenance audit: total={} derived={} assumption={} rejected={} \
+         synthesizedCorpus={} brdNotFound={} corpusEmpty={} corpusSource={:?}",
+        s.total,
+        s.derived_count,
+        s.assumption_count,
+        s.rejected_count,
+        report.synthesized_corpus,
+        report.brd_not_found,
+        report.corpus_empty,
+        report.corpus_source,
     );
 
     if let Some(reason) = &report.validation.panic_reason {
         eprintln!("error: validator panic (fail-closed) -- {reason}");
+        return ExitCode::from(1);
+    }
+    // Fail-closed mode must not report a green pass for an audit that verified
+    // nothing: a missing BRD means there were no claims to check at all.
+    if args.fail_on_rejected && report.brd_not_found {
+        eprintln!(
+            "provenance verification FAILED: no BRD found under the project; nothing was \
+             verified (--fail-on-rejected)"
+        );
         return ExitCode::from(1);
     }
     if args.fail_on_rejected && s.rejected_count > 0 {

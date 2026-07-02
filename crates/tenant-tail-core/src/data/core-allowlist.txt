@@ -1,6 +1,8 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026 Bartek Kus
-# Spec: specs/121-claim-provenance-enforcement/spec.md — FR-015 input (a)
+# Relicensed Apache-2.0 from OAP's AGPL-3.0 source by the sole copyright
+# holder (see NOTICE). OAP source spec: 121-claim-provenance-enforcement
+# FR-015 input (a); the tenant-tail owner is spec 002-provenance-verify-core.
 #
 # Built-in core allowlist for the spec 121 provenance validator.
 #
