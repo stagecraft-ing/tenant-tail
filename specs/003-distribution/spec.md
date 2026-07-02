@@ -102,6 +102,12 @@ machinery that delivers it: the npm binary shim and the release pipeline.
   (parity with the npm shim's unsupported-host refusal). Publish is OIDC
   Trusted-Publishing and idempotent (skip-existing); absent the one-time setup
   (`vars.PYPI_TRUSTED_PUBLISHING`) the release leg is a clean no-op.
+- The Linux release binaries MUST honor the `manylinux_2_17` glibc floor that the
+  wheel and npm `libc` tags promise: they are cross-linked against glibc 2.17
+  (via `cargo zigbuild --target <triple>.2.17`) and `release.yml` asserts, from
+  the ELF dynamic symbol table, that no referenced `GLIBC_x.y` symbol exceeds
+  2.17 before publishing. A toolchain bump that raised the floor fails the
+  release rather than shipping a wheel/npm tag that is a lie.
 - The verbs MUST be verify-only and offline: no emitter verb, no `--jwks-url`
   network fetch (a saved JWKS file is read instead), no writes into an audited
   project.
