@@ -18,9 +18,12 @@
 //   --version <v>   release version (e.g. 0.1.0 or v0.1.0); default: main package.json version
 //   --out <dir>     output root; default: <npm>/dist/packages
 //   --target <key>  build only this platform key (repeatable); default: all five
-//   --write-main    rewrite the main package.json version + optionalDependencies to lock to --version
-//   --lock-only     do not generate packages; only verify/lock the main package (implies --write-main)
+//   --write-main    fail-closed version check: verify the main package.json version
+//                   + optionalDependencies already equal --version, and exit non-zero
+//                   on any mismatch (it never rewrites package.json)
+//   --lock-only     do not generate packages; only run the --write-main check (implies --write-main)
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -100,6 +103,30 @@ function readMainPackage() {
   return JSON.parse(fs.readFileSync(mainPackageJsonPath(), 'utf8'));
 }
 
+// Verify an archive against its sibling `<archive>.sha256` sidecar (the format
+// release.yml writes: the hex digest as the first whitespace-delimited token,
+// e.g. `sha256sum`/`shasum -a 256` output) before anything is extracted from
+// it. A missing sidecar is refused, not skipped: the checksum must exist.
+function verifyArchiveChecksum(archive) {
+  const sidecar = `${archive}.sha256`;
+  if (!fs.existsSync(sidecar)) {
+    die(`missing checksum sidecar: ${sidecar} (refusing to extract ${archive} without it)`);
+  }
+  const sidecarText = fs.readFileSync(sidecar, 'utf8').trim();
+  const expected = (sidecarText.split(/\s+/)[0] || '').toLowerCase();
+  if (!expected) {
+    die(`checksum sidecar ${sidecar} is empty or malformed`);
+  }
+  const actual = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+  if (actual !== expected) {
+    die(
+      `checksum mismatch for ${archive}:\n` +
+        `  expected (from ${sidecar}): ${expected}\n` +
+        `  actual:                     ${actual}`,
+    );
+  }
+}
+
 // Extract the binary for one target from an archive directory into a temp file;
 // returns its path. Tarballs via `tar`, zips via `unzip` (both present on the
 // publish runner).
@@ -113,6 +140,7 @@ function extractBinary(target, archivesDir, tag, binFile) {
   if (!fs.existsSync(archive)) {
     die(`archive not found for ${target}: ${archive}`);
   }
+  verifyArchiveChecksum(archive);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tenant-tail-extract-'));
   // Extract the whole archive rather than selecting one member: the release tar
   // is built with `tar -C staging .`, so members are stored "./"-prefixed
@@ -134,7 +162,7 @@ function extractBinary(target, archivesDir, tag, binFile) {
 
 function platformPackageJson(target, version) {
   const t = TARGETS[target];
-  return {
+  const pkg = {
     name: `@tenant-tail/cli-${target}`,
     version,
     description: `Prebuilt tenant-tail CLI binary for ${target}. Installed automatically by the \`tenant-tail\` package; do not depend on it directly.`,
@@ -150,6 +178,15 @@ function platformPackageJson(target, version) {
     // reliable way to publish them publicly.
     publishConfig: { access: 'public' },
   };
+  // The two Linux targets ship a glibc binary; without a `libc` field, npm's
+  // install-time platform match still selects this package on a musl host
+  // (Alpine), leaving only the runtime guard (lib/platform.js's isMuslLinux)
+  // to refuse it after download. Declaring `libc: ["glibc"]` lets npm itself
+  // skip the package on musl hosts.
+  if (t.os === 'linux') {
+    pkg.libc = ['glibc'];
+  }
+  return pkg;
 }
 
 function writeJson(file, value) {
@@ -195,20 +232,10 @@ function generateOne(target, version, tag, outRoot, opts) {
   return pkgDir;
 }
 
-// Lock the main package.json version + optionalDependencies to `version`.
-function lockMainPackage(version) {
-  const file = mainPackageJsonPath();
-  const pkg = readMainPackage();
-  pkg.version = version;
-  pkg.optionalDependencies = pkg.optionalDependencies || {};
-  for (const target of Object.keys(TARGETS)) {
-    pkg.optionalDependencies[`@tenant-tail/cli-${target}`] = version;
-  }
-  writeJson(file, pkg);
-  log(`  locked main package.json to ${version}`);
-}
-
 // Verify the committed main package already locks every target to `version`.
+// Fail-closed: this is the only check `--write-main` runs (see main()) -- a
+// version/tag mismatch must stop the release, not be silently papered over by
+// rewriting package.json. Mirrors generate_wheels.py's verify_version_lock.
 function verifyMainLock(version) {
   const pkg = readMainPackage();
   const problems = [];
@@ -225,7 +252,8 @@ function verifyMainLock(version) {
   if (problems.length > 0) {
     die(
       `version lock mismatch:\n  - ${problems.join('\n  - ')}\n` +
-        'Re-run with --write-main to update, or fix package.json.',
+        'Bump npm/package.json\'s version and optionalDependencies pins to match ' +
+        '(or pass the correct --version); this script never rewrites package.json.',
     );
   }
 }
@@ -239,14 +267,12 @@ function main() {
     die('--binary requires exactly one --target');
   }
 
-  if (opts.writeMain) {
-    lockMainPackage(version);
-  } else {
-    verifyMainLock(version);
-  }
+  // Both --write-main and the default path verify the same lock; there is no
+  // write path anymore (see verifyMainLock's comment).
+  verifyMainLock(version);
 
   if (opts.lockOnly) {
-    log(`version lock verified/applied: ${version}`);
+    log(`version lock verified: ${version}`);
     return;
   }
 

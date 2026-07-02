@@ -12,7 +12,7 @@
 use crate::inter_stage_manifest::{InterStageManifest, RunKeyChain, verify_manifest};
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use chrono::{DateTime, Utc};
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -29,8 +29,13 @@ use std::path::Path;
 ///
 /// Both fields are `skip_serializing_if = "Option::is_none"` so a
 /// certificate built without them serialises byte-identically to a
-/// pre-1.3.0 payload -- only the version string differs. Legacy 1.2.0 /
-/// 1.1.0 / 1.0.0 fixtures still pass through the verifier.
+/// pre-1.3.0 payload; only the version string differs. Note this is a
+/// serialization property, not an acceptance property: the verifier
+/// accepts ONLY [`CERTIFICATE_VERSION`] (see the version check in
+/// [`verify_certificate`]). A payload carrying an older version string
+/// serialises byte-identically for the fields it shares, but is still
+/// rejected as an unsupported version; regenerate legacy fixtures to the
+/// current version.
 ///
 /// 1.2.0 (spec 162 §FR-008) introduced the optional `sandboxExecution`
 /// per-stage record. 1.1.0 added Ed25519 signing (spec 102 FR-008.1);
@@ -569,9 +574,35 @@ fn verify_certificate_signature(cert: &GovernanceCertificate) -> Result<(), Stri
     let canonical = serde_json::to_string(&cert_for_sig)
         .map_err(|e| format!("certificate re-serialises to JSON for verification: {e}"))?;
 
+    // `verify_strict` (not `verify`): rejects signature malleability and
+    // small-order / non-canonical public keys, so a second valid signature
+    // cannot be forged for the same payload and a degenerate key cannot pass.
     verifying_key
-        .verify(canonical.as_bytes(), &sig)
+        .verify_strict(canonical.as_bytes(), &sig)
         .map_err(|e| format!("Ed25519 signature verification failed: {e}"))
+}
+
+/// Reject a path fragment supplied by the (untrusted) certificate that would
+/// escape the operator-supplied `--artifact-dir`. Only plain in-tree relative
+/// segments are permitted: an absolute path, a drive prefix, or a `..`
+/// traversal component is refused. This closes both an out-of-tree read oracle
+/// (e.g. `stage_id`/artifact name `../../etc/passwd`) and an unbounded-read DoS
+/// (e.g. `/dev/zero`) driven by attacker-controlled certificate fields. The
+/// check is lexical (no filesystem access), so it is total and cannot hang.
+fn ensure_in_tree(label: &str, value: &str) -> Result<(), String> {
+    use std::path::Component;
+    for comp in Path::new(value).components() {
+        match comp {
+            Component::Normal(_) | Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(format!(
+                    "refusing to read {label} {value:?}: path escapes --artifact-dir \
+                     (absolute path or `..` traversal in an untrusted certificate field)"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// SHA-256 hash of raw bytes, returned as lowercase hex.
@@ -628,8 +659,16 @@ pub fn verify_certificate(
     // 2. Verify artifact hashes against files on disk (FR-005).
     if let Some(dir) = artifact_dir {
         for stage in &cert.stages {
+            if let Err(e) = ensure_in_tree("stage id", &stage.stage_id) {
+                errors.push(e);
+                continue;
+            }
             let stage_dir = dir.join(&stage.stage_id);
             for (artifact_name, recorded_hash) in &stage.artifact_hashes {
+                if let Err(e) = ensure_in_tree("artifact name", artifact_name) {
+                    errors.push(e);
+                    continue;
+                }
                 let artifact_path = stage_dir.join(artifact_name);
                 match std::fs::read(&artifact_path) {
                     Ok(contents) => {
@@ -751,16 +790,44 @@ pub fn verify_certificate_with_platform(
                     // `run_id` claim is the PLATFORM run identity, distinct
                     // from the engine-minted `pipeline_run_id`; it is
                     // surfaced informationally, not compared.
-                    let claimed_hash = verified.payload["certificate_sha256"]
-                        .as_str()
-                        .unwrap_or("");
-                    if claimed_hash != cert.certificate_hash {
+                    //
+                    // Fail closed if the seal carries no `certificate_sha256`
+                    // claim at all: a seal that binds nothing must never be
+                    // treated as binding this certificate.
+                    match verified.payload["certificate_sha256"].as_str() {
+                        Some(claimed_hash) if claimed_hash == cert.certificate_hash => {}
+                        Some(claimed_hash) => {
+                            result.errors.push(format!(
+                                "platform countersign binds certificate hash {claimed_hash} but \
+                                 this certificate's hash is {}",
+                                cert.certificate_hash
+                            ));
+                        }
+                        None => {
+                            result.errors.push(
+                                "platform countersign carries no certificate_sha256 claim -- it \
+                                 binds no certificate (spec 198 FR-014)"
+                                    .into(),
+                            );
+                        }
+                    }
+
+                    // Defence-in-depth: when the seal names an `envelope_hash`
+                    // and the certificate carries an `admittedEnvelopeHash`
+                    // (both inside the engine signature), they must agree --
+                    // the seal and the signed body must reference the same
+                    // admission envelope.
+                    if let (Some(sealed_env), Some(cert_env)) = (
+                        verified.payload["envelope_hash"].as_str(),
+                        cert.admitted_envelope_hash.as_deref(),
+                    ) && sealed_env != cert_env
+                    {
                         result.errors.push(format!(
-                            "platform countersign binds certificate hash {claimed_hash} but this \
-                             certificate's hash is {}",
-                            cert.certificate_hash
+                            "platform countersign binds envelope hash {sealed_env} but the \
+                             certificate's admittedEnvelopeHash is {cert_env} (spec 198 FR-014)"
                         ));
                     }
+
                     if result.errors.is_empty() {
                         result.notices.push(format!(
                             "platform countersign VERIFIED (kid {}, platform run {}, {} grant(s) in chain)",
@@ -1459,6 +1526,71 @@ mod tests {
             result.notices.iter().any(|n| n.contains("VERIFIED")),
             "expected a verified notice: {:?}",
             result.notices
+        );
+    }
+
+    fn stage_with_artifact(stage_id: &str, artifact_name: &str) -> StageRecord {
+        let mut hashes = BTreeMap::new();
+        hashes.insert(artifact_name.to_string(), "deadbeef".to_string());
+        StageRecord {
+            stage_id: stage_id.to_string(),
+            status: StageOutcome::Passed,
+            artifact_hashes: hashes,
+            gate_result: None,
+            duration_ms: None,
+            sandbox_execution: None,
+        }
+    }
+
+    #[test]
+    fn artifact_name_traversal_is_refused_not_read() {
+        // A `..` artifact name from an untrusted certificate must be refused
+        // rather than escaping --artifact-dir.
+        let mut cert = minimal_cert(None);
+        cert.stages
+            .push(stage_with_artifact("s0", "../../../../etc/passwd"));
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let result = verify_certificate(&cert, Some(tmp.path()));
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("escapes --artifact-dir")),
+            "expected a traversal refusal; errors: {:?}",
+            result.errors
+        );
+    }
+
+    #[test]
+    fn absolute_artifact_name_is_refused() {
+        let mut cert = minimal_cert(None);
+        cert.stages.push(stage_with_artifact("s0", "/etc/passwd"));
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let result = verify_certificate(&cert, Some(tmp.path()));
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("escapes --artifact-dir")),
+            "expected an absolute-path refusal; errors: {:?}",
+            result.errors
+        );
+    }
+
+    #[test]
+    fn absolute_stage_id_is_refused() {
+        let mut cert = minimal_cert(None);
+        cert.stages
+            .push(stage_with_artifact("/abs-stage", "ok.txt"));
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let result = verify_certificate(&cert, Some(tmp.path()));
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("escapes --artifact-dir")),
+            "expected a stage-id refusal; errors: {:?}",
+            result.errors
         );
     }
 

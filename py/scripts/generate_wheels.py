@@ -78,6 +78,28 @@ def read_pyproject_version() -> str:
 
 # --- binary acquisition ------------------------------------------------------
 
+def _verify_archive_checksum(archive: Path) -> None:
+    """Verify `archive` against its sibling `<archive>.sha256` sidecar (the
+    format release.yml writes: the hex digest as the first whitespace-delimited
+    token, e.g. `sha256sum`/`shasum -a 256` output) before anything is extracted
+    from it. A missing sidecar is refused, not skipped: the checksum must exist.
+    """
+    sidecar = archive.with_name(archive.name + ".sha256")
+    if not sidecar.exists():
+        die(f"missing checksum sidecar: {sidecar} (refusing to extract {archive} without it)")
+    text = sidecar.read_text(encoding="utf-8").strip()
+    expected = (text.split()[0].lower() if text else "")
+    if not expected:
+        die(f"checksum sidecar {sidecar} is empty or malformed")
+    actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+    if actual != expected:
+        die(
+            f"checksum mismatch for {archive}:\n"
+            f"  expected (from {sidecar}): {expected}\n"
+            f"  actual:                     {actual}"
+        )
+
+
 def _extract_from_archive(target: str, archives_dir: Path, tag: str, bin_file: str) -> Path:
     """Extract the binary for `target` from its release archive into a temp dir.
 
@@ -94,6 +116,7 @@ def _extract_from_archive(target: str, archives_dir: Path, tag: str, bin_file: s
     archive = archives_dir / f"tenant-tail-{tag}-{rec['triple']}.{ext}"
     if not archive.exists():
         die(f"archive not found for {target}: {archive}")
+    _verify_archive_checksum(archive)
     tmp = Path(tempfile.mkdtemp(prefix="tenant-tail-extract-"))
     if is_win:
         with zipfile.ZipFile(archive) as zf:

@@ -18,7 +18,8 @@ use crate::provenance::allowlist::{
     detect_external_entities,
 };
 use crate::provenance::citation::{
-    CitationResult, EntitySearchSummary, search_entity, verify_citation,
+    CitationResult, EntitySearchSummary, cited_span_text, search_entity, span_covers_entity,
+    verify_citation,
 };
 use crate::provenance::corpus::{Corpus, CorpusEntry, extracted_corpus_hash};
 use serde::{Deserialize, Serialize};
@@ -186,24 +187,36 @@ fn validate_inner(
 
     let plausibility = CapitalizationHeuristic;
 
+    // Recompute every anchor from the claim's own text. The producer-supplied
+    // `claim.anchor_hash` is never trusted verbatim: an anchor that does not
+    // match the text no longer certifies that text, and hand-set anchors could
+    // otherwise dodge the duplicate-anchor collision gate. Collision detection
+    // and the report both use the recomputed anchor.
+    let recomputed: Vec<AnchorHash> = claims
+        .iter()
+        .map(|c| tenant_tail_types::anchor_hash(&c.text))
+        .collect();
+
     // Step 1: anchor-hash collisions FAIL Stage 1 (User Story 3 acceptance #4).
     // Both (or all) claims sharing an anchor are rejected -- the validator
     // does NOT pick a winner.
     let mut anchor_counts: BTreeMap<&AnchorHash, u32> = BTreeMap::new();
-    for c in claims {
-        *anchor_counts.entry(&c.anchor_hash).or_insert(0) += 1;
+    for a in &recomputed {
+        *anchor_counts.entry(a).or_insert(0) += 1;
     }
-    let collisions: BTreeSet<&AnchorHash> = anchor_counts
+    let collisions: BTreeSet<AnchorHash> = anchor_counts
         .iter()
         .filter(|(_, n)| **n > 1)
-        .map(|(a, _)| *a)
+        .map(|(a, _)| (*a).clone())
         .collect();
 
     // Step 2: per-claim classification.
     let mut records: Vec<ClaimRecord> = Vec::with_capacity(claims.len());
     let mut new_assumption_slots: u32 = 0;
 
-    for claim in claims {
+    for (i, claim) in claims.iter().enumerate() {
+        let recomputed_anchor = &recomputed[i];
+
         // Detect external entities up-front so the report has the
         // `extracted_entity_candidates` field populated even when the
         // claim is rejected for a different reason.
@@ -211,12 +224,29 @@ fn validate_inner(
             detect_external_entities(&claim.text, allowlist, &plausibility);
         let names_external_entity = !entity_candidates.is_empty();
 
-        // Step 1 result: anchor collision overrides everything else.
-        if collisions.contains(&claim.anchor_hash) {
+        // Anchor integrity overrides everything: a claim whose declared anchor
+        // does not equal the hash of its own text is rejected outright.
+        if &claim.anchor_hash != recomputed_anchor {
             records.push(ClaimRecord {
                 id: claim.id.clone(),
                 kind: claim.kind,
-                anchor_hash: claim.anchor_hash.clone(),
+                anchor_hash: recomputed_anchor.clone(),
+                provenance_mode: ProvenanceMode::Rejected {
+                    reason: "anchor_hash_mismatch".into(),
+                },
+                names_external_entity,
+                extracted_entity_candidates: entity_candidates,
+                entity_search: vec![],
+            });
+            continue;
+        }
+
+        // Step 1 result: anchor collision overrides everything else.
+        if collisions.contains(recomputed_anchor) {
+            records.push(ClaimRecord {
+                id: claim.id.clone(),
+                kind: claim.kind,
+                anchor_hash: recomputed_anchor.clone(),
                 provenance_mode: ProvenanceMode::Rejected {
                     reason: "duplicate_anchor".into(),
                 },
@@ -301,13 +331,18 @@ fn validate_inner(
             continue;
         }
 
-        // Untagged claim WITH external entity:
-        //   - if no citations declared → if any corpus hits exist for any
-        //     candidate entity, classify as DerivedWeak (operator should
-        //     supply explicit Citation); otherwise Reject;
-        //   - if citations declared → verify each, classifying as
-        //     AssumptionOrphaned on quote_hash drift, Rejected on forge,
-        //     Derived on clean verify.
+        // Untagged claim WITH external entity (fail-closed):
+        //   - no citations declared → Rejected: `citation_unbound` when corpus
+        //     hits exist (the operator must bind one), else
+        //     `no_citation_for_external_entity`.
+        //   - citations declared → verify each; Rejected on any
+        //     forge/drift/invalid citation, else Derived on a clean verify that
+        //     also substantiates every flagged entity (coverage check below).
+        // NB: `DerivedWeak` and `AssumptionOrphaned` are intentionally NOT
+        // produced by `validate()` -- they are reserved for the future FR-022
+        // corpus-drift workflow (see the note in `summarise`). The V1 gate
+        // rejects rather than admitting a weak-derived, so the report's
+        // `derivedWeak`/`assumptionOrphaned` counts are always 0 here.
         if claim.citations.is_empty() {
             if total_hits == 0 {
                 records.push(ClaimRecord {
@@ -355,10 +390,17 @@ fn validate_inner(
         // quote is genuinely absent. That belongs to a future drift
         // operation (separate from `validate()`'s primary job here).
         let mut verdict: Option<ProvenanceMode> = None;
+        // Actual corpus spans of the citations that verified clean. Read from
+        // the corpus (not the producer-declared `cit.quote`) so the coverage
+        // check below cannot be satisfied by a fabricated quote string.
+        let mut matched_spans: Vec<String> = Vec::new();
         for cit in &claim.citations {
             match verify_citation(corpus, cit) {
                 CitationResult::Matched => {
                     verdict = Some(ProvenanceMode::Derived);
+                    if let Some(span) = cited_span_text(corpus, cit) {
+                        matched_spans.push(span);
+                    }
                     // Continue verifying -- ALL must match for a clean Derived.
                 }
                 CitationResult::HashMismatch { .. } => {
@@ -381,6 +423,25 @@ fn validate_inner(
                 }
             }
         }
+
+        // A clean-verifying citation set is not enough: it must actually
+        // substantiate the external entities that triggered the requirement.
+        // Every flagged entity must appear (as a whole word) in at least one
+        // verified span. Otherwise any correctly-hashed corpus span -- however
+        // unrelated -- would satisfy the gate for an unbacked entity.
+        if matches!(verdict, Some(ProvenanceMode::Derived)) {
+            let uncovered = entity_candidates.iter().any(|entity| {
+                !matched_spans
+                    .iter()
+                    .any(|span| span_covers_entity(span, entity))
+            });
+            if uncovered {
+                verdict = Some(ProvenanceMode::Rejected {
+                    reason: "citation_does_not_substantiate_entity".into(),
+                });
+            }
+        }
+
         let mode = verdict.unwrap_or(ProvenanceMode::Rejected {
             reason: "no_citation_for_external_entity".into(),
         });
@@ -798,7 +859,13 @@ fn file_starts_with_brd_heading(path: &Path) -> bool {
 
 fn load_corpus(project_dir: &Path, corpus_override: Option<&Path>) -> (Corpus, CorpusSource) {
     if let Some(p) = corpus_override {
-        let entries = load_typed_extraction_dir(p).unwrap_or_default();
+        // Honour the documented "typed JSON or legacy `.txt` directory"
+        // contract: prefer typed extraction JSON, fall back to legacy `.txt`
+        // when the override holds no typed entries.
+        let mut entries = load_typed_extraction_dir(p).unwrap_or_default();
+        if entries.is_empty() {
+            entries = load_legacy_txt_dir(p).unwrap_or_default();
+        }
         return (Corpus::from_entries(entries), CorpusSource::Override);
     }
 
@@ -923,9 +990,12 @@ fn synthesise_extraction(text: &str, path: &Path) -> ExtractionOutput {
 pub fn render_audit_report(report: &AuditReport) -> String {
     use std::fmt::Write;
     let v = &report.validation;
-    let total = v.summary.total.max(1);
-    let health =
-        100.0 * (v.summary.derived_count + v.summary.derived_weak_count) as f32 / total as f32;
+    let total = v.summary.total.max(1) as u64;
+    // Health as integer tenths-of-a-percent, rounded to nearest (the `+ total/2`
+    // reproduces the old `{:.1}` rounding). Integer arithmetic (not f32) keeps
+    // the rendered report byte-identical across platforms.
+    let good = (v.summary.derived_count + v.summary.derived_weak_count) as u64;
+    let health_tenths = (good * 1000 + total / 2) / total;
     let mut out = String::new();
 
     let _ = writeln!(out, "# Retroactive Provenance Audit Report");
@@ -976,29 +1046,37 @@ pub fn render_audit_report(report: &AuditReport) -> String {
     let _ = writeln!(out, "| rejected | {} |", v.summary.rejected_count);
     let _ = writeln!(out, "| **total** | **{}** | ", v.summary.total);
     let _ = writeln!(out);
-    let _ = writeln!(out, "**provenanceHealth:** {:.1}%", health);
+    let _ = writeln!(
+        out,
+        "**provenanceHealth:** {}.{}%",
+        health_tenths / 10,
+        health_tenths % 10
+    );
     if let Some(panic_msg) = &v.panic_reason {
         let _ = writeln!(out);
         let _ = writeln!(
             out,
-            "> **⚠ Validator panic:** `{panic_msg}` -- gate failed closed (FR-005)."
+            "> **⚠ Validator panic:** `{}` -- gate failed closed (FR-005).",
+            sanitize_inline(panic_msg)
         );
     }
     let _ = writeln!(out);
     let _ = writeln!(out, "## Findings");
     let _ = writeln!(out);
     for r in &v.claims {
-        let _ = writeln!(out, "### {}", r.id);
+        let _ = writeln!(out, "### {}", sanitize_inline(&r.id.to_string()));
         let _ = writeln!(out, "- mode: `{}`", mode_label(&r.provenance_mode));
         let _ = writeln!(out, "- kind: `{}`", r.kind.prefix());
         let _ = writeln!(out, "- anchorHash: `{}`", r.anchor_hash);
         let _ = writeln!(out, "- namesExternalEntity: {}", r.names_external_entity);
         if !r.extracted_entity_candidates.is_empty() {
-            let _ = writeln!(
-                out,
-                "- entityCandidates: {}",
-                r.extracted_entity_candidates.join(", ")
-            );
+            let candidates = r
+                .extracted_entity_candidates
+                .iter()
+                .map(|c| sanitize_inline(c))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = writeln!(out, "- entityCandidates: {candidates}");
         }
         if !r.entity_search.is_empty() {
             let _ = writeln!(out, "- corpusSearchSummary:");
@@ -1006,7 +1084,7 @@ pub fn render_audit_report(report: &AuditReport) -> String {
                 let _ = writeln!(
                     out,
                     "  - `{}`: pagesSearched={}, hitCount={}",
-                    s.source.display(),
+                    sanitize_inline(&s.source.display().to_string()),
                     s.pages_searched,
                     s.hit_count
                 );
@@ -1039,8 +1117,18 @@ fn mode_label(m: &ProvenanceMode) -> String {
         ProvenanceMode::DerivedWeak => "derivedWeak".into(),
         ProvenanceMode::Assumption => "assumption".into(),
         ProvenanceMode::AssumptionOrphaned => "assumptionOrphaned".into(),
-        ProvenanceMode::Rejected { reason } => format!("rejected: {reason}"),
+        ProvenanceMode::Rejected { reason } => format!("rejected: {}", sanitize_inline(reason)),
     }
+}
+
+/// Neutralise untrusted text before it is interpolated into the markdown
+/// report inside a code span or block. Backticks and control characters
+/// (newlines included) become spaces, so a crafted entity token or panic
+/// payload cannot break out of its span and inject report formatting.
+fn sanitize_inline(s: &str) -> String {
+    s.chars()
+        .map(|c| if c == '`' || c.is_control() { ' ' } else { c })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1146,5 +1234,117 @@ mod panic_guard_tests {
         assert!(report.panic_reason.is_some());
         assert_eq!(report.claims.len(), 1);
         assert_eq!(report.claims[0].id.0, "VALIDATOR-PANIC");
+    }
+}
+
+#[cfg(test)]
+mod remediation_tests {
+    use super::*;
+    use chrono::TimeZone;
+    use std::collections::HashMap;
+    use tenant_tail_types::knowledge::{ExtractionOutput, Extractor};
+    use tenant_tail_types::provenance::{Citation, ClaimId, anchor_hash, quote_hash};
+
+    fn now() -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap()
+    }
+    fn allow() -> Allowlist {
+        derive_allowlist(&ProjectContext::default())
+    }
+    fn extraction(text: &str) -> ExtractionOutput {
+        ExtractionOutput {
+            text: text.into(),
+            pages: None,
+            language: None,
+            outline: None,
+            metadata: HashMap::new(),
+            extractor: Extractor {
+                kind: "t".into(),
+                version: "1".into(),
+                agent_run: None,
+            },
+        }
+    }
+    fn corpus1(source: &str, text: &str) -> Corpus {
+        Corpus::from_entries(vec![CorpusEntry {
+            source_key: PathBuf::from(source),
+            output: extraction(text),
+        }])
+    }
+    fn claim(text: &str, anchor: AnchorHash, citations: Vec<Citation>) -> Claim {
+        Claim {
+            id: ClaimId("BR-001".into()),
+            kind: ClaimKind::Br,
+            stage: 1,
+            minted_at: now(),
+            text: text.into(),
+            anchor_hash: anchor,
+            provenance_mode: ProvenanceMode::Derived,
+            citations,
+            assumption: None,
+            names_external_entity: false,
+            extracted_entity_candidates: vec![],
+            candidate_promotion: None,
+        }
+    }
+    fn cite(source: &str, range: (u32, u32), corpus_span: &str) -> Citation {
+        Citation {
+            source: PathBuf::from(source),
+            line_range: range,
+            quote: "declared quote is untrusted".into(),
+            quote_hash: quote_hash(corpus_span),
+        }
+    }
+
+    /// H1: a claim whose declared anchor is not the hash of its own text is
+    /// rejected before any other classification.
+    #[test]
+    fn anchor_hash_mismatch_is_rejected() {
+        let text = "the system integrates with Zorptech";
+        let c = claim(text, AnchorHash("deadbeef".into()), vec![]);
+        let report = validate(
+            &[c],
+            &Corpus::default(),
+            &allow(),
+            &AssumptionBudget::default(),
+            now(),
+        );
+        assert!(
+            matches!(&report.claims[0].provenance_mode, ProvenanceMode::Rejected { reason } if reason == "anchor_hash_mismatch"),
+            "got {:?}",
+            report.claims[0].provenance_mode
+        );
+    }
+
+    /// C1: a citation that verifies (correct hash) but whose cited span does
+    /// not name the flagged external entity does NOT substantiate the claim.
+    #[test]
+    fn citation_not_covering_entity_is_rejected() {
+        let text = "the system integrates with Zorptech";
+        let span = "office hours are nine to five";
+        let corpus = corpus1("a.txt", span);
+        let c = claim(text, anchor_hash(text), vec![cite("a.txt", (1, 1), span)]);
+        let report = validate(&[c], &corpus, &allow(), &AssumptionBudget::default(), now());
+        assert!(
+            matches!(&report.claims[0].provenance_mode, ProvenanceMode::Rejected { reason } if reason == "citation_does_not_substantiate_entity"),
+            "got {:?}",
+            report.claims[0].provenance_mode
+        );
+    }
+
+    /// C1: a citation whose span actually names the entity resolves Derived.
+    #[test]
+    fn citation_covering_entity_is_derived() {
+        let text = "the system integrates with Zorptech";
+        let span = "the vendor Zorptech provides finance software";
+        let corpus = corpus1("a.txt", span);
+        let c = claim(text, anchor_hash(text), vec![cite("a.txt", (1, 1), span)]);
+        let report = validate(&[c], &corpus, &allow(), &AssumptionBudget::default(), now());
+        assert_eq!(
+            report.claims[0].provenance_mode,
+            ProvenanceMode::Derived,
+            "got {:?}",
+            report.claims[0].provenance_mode
+        );
     }
 }

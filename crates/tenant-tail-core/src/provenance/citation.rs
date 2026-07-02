@@ -8,9 +8,9 @@
 //! spec §7 Open Decisions: V1 fails closed and requires re-citation.
 //!
 //! `search_entity` (FR-021) walks every `ExtractionOutput.text` and
-//! `pages[].text` in the corpus for case-insensitive substring matches
+//! `pages[].text` in the corpus for case-insensitive whole-word matches
 //! of an entity surface form. Returns per-source hit summaries sorted
-//! deterministically.
+//! deterministically, with document-global line numbers.
 
 use crate::provenance::corpus::Corpus;
 use serde::{Deserialize, Serialize};
@@ -84,6 +84,61 @@ pub fn verify_citation(corpus: &Corpus, citation: &Citation) -> CitationResult {
     }
 }
 
+/// Return the verbatim source span (`[start..=end]`) a citation points at, or
+/// `None` if the source or line range is invalid. This reads the ACTUAL corpus
+/// content, independent of hash verification and independent of the
+/// caller-declared `citation.quote` (which the producer controls). Callers use
+/// it to confirm a citation substantiates what it claims to.
+pub fn cited_span_text(corpus: &Corpus, citation: &Citation) -> Option<String> {
+    let entry = corpus.get(&citation.source)?;
+    let (start, end) = citation.line_range;
+    let lines: Vec<&str> = entry.output.text.split('\n').collect();
+    let line_count = lines.len() as u32;
+    if start == 0 || end == 0 || start > end || end > line_count {
+        return None;
+    }
+    Some(lines[(start - 1) as usize..end as usize].join("\n"))
+}
+
+/// True if `span` contains `entity` as a whole word (case-insensitive). Word
+/// boundaries are Unicode-alphanumeric, so `ERP` does NOT match inside
+/// `enterprise`. Used to confirm a cited span actually names the external
+/// entity it is offered as evidence for (spec 121 FR-019/FR-020).
+pub fn span_covers_entity(span: &str, entity: &str) -> bool {
+    contains_word(&span.to_lowercase(), &entity.to_lowercase())
+}
+
+/// Case-insensitive whole-word containment. `haystack` and `needle` must both
+/// already be lowercased by the caller. A match must be bounded on each side by
+/// a non-alphanumeric char or a string edge, so substring-of-a-larger-word hits
+/// (`erp` in `enterprise`, `it` in `commit`) do not count.
+fn contains_word(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    for (idx, matched) in haystack.match_indices(needle) {
+        let before_ok = haystack[..idx]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        let after_ok = haystack[idx + matched.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
+        if before_ok && after_ok {
+            return true;
+        }
+    }
+    false
+}
+
+/// Upper bound on the number of `CitationHit`s (each cloning a line of source
+/// text) retained per source. `hit_count` remains the true total; only the
+/// stored `hits` sample is capped, bounding memory/JSON size against a crafted
+/// corpus + claim set that would otherwise force superlinear allocation
+/// (spec 121 FR-021, resource-exhaustion guard).
+const MAX_HITS_PER_SOURCE: usize = 100;
+
 /// Per-source hit summary returned by `search_entity` (FR-021).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,12 +159,21 @@ pub struct CitationHit {
     pub quote: String,
 }
 
-/// Search every corpus entry for case-insensitive substring matches of
+/// Search every corpus entry for case-insensitive whole-word matches of
 /// `entity_text`. Walks both `ExtractionOutput.text` and `pages[].text`
 /// (FR-021).
 ///
+/// Reported `line_range`s are document-global (1-based into the source's
+/// top-level `text`, which spec 120 defines as the page concatenation), so a
+/// hit reported here round-trips as a `Citation` that [`verify_citation`] and
+/// [`cited_span_text`] can re-resolve. Matching is whole-word (see
+/// [`contains_word`]), not raw substring, so `ERP` no longer matches inside
+/// `enterprise`.
+///
 /// Returns one `EntitySearchSummary` per source where at least one hit
-/// was found, sorted by `source` for deterministic output (FR-002).
+/// was found, sorted by `source` for deterministic output (FR-002). The stored
+/// `hits` sample is capped at [`MAX_HITS_PER_SOURCE`]; `hit_count` is the true
+/// total.
 pub fn search_entity(corpus: &Corpus, entity_text: &str) -> Vec<EntitySearchSummary> {
     let needle = entity_text.to_lowercase();
     if needle.is_empty() {
@@ -120,6 +184,11 @@ pub fn search_entity(corpus: &Corpus, entity_text: &str) -> Vec<EntitySearchSumm
 
     for entry in corpus.entries() {
         let mut hits: Vec<CitationHit> = Vec::new();
+        let mut hit_count: u32 = 0;
+        // Document-global line cursor (1-based). Incremented across pages so
+        // the numbering matches `output.text` (the page concatenation), which
+        // is exactly what citations index into.
+        let mut global_line: u32 = 0;
 
         // FR-021 says "every ExtractionOutput.text AND every pages[].text".
         // Spec 120 documents that for paginated outputs, top-level `text`
@@ -128,35 +197,36 @@ pub fn search_entity(corpus: &Corpus, entity_text: &str) -> Vec<EntitySearchSumm
         // fall back to output.text otherwise -- covers both shapes
         // exactly once.
         let pages_searched: u32;
-        if let Some(pages) = &entry.output.pages {
-            pages_searched = pages.len() as u32;
-            for page in pages {
-                for (i, line) in page.text.split('\n').enumerate() {
-                    if line.to_lowercase().contains(&needle) {
-                        hits.push(CitationHit {
-                            line_range: ((i + 1) as u32, (i + 1) as u32),
-                            quote: line.to_string(),
-                        });
-                    }
-                }
+        // Collect the source's lines once, in the same order `output.text`
+        // concatenates them, then scan with a single document-global cursor.
+        let lines: Vec<&str> = match &entry.output.pages {
+            Some(pages) => {
+                pages_searched = pages.len() as u32;
+                pages.iter().flat_map(|p| p.text.split('\n')).collect()
             }
-        } else {
-            pages_searched = 1;
-            for (i, line) in entry.output.text.split('\n').enumerate() {
-                if line.to_lowercase().contains(&needle) {
+            None => {
+                pages_searched = 1;
+                entry.output.text.split('\n').collect()
+            }
+        };
+        for line in lines {
+            global_line += 1;
+            if contains_word(&line.to_lowercase(), &needle) {
+                hit_count += 1;
+                if hits.len() < MAX_HITS_PER_SOURCE {
                     hits.push(CitationHit {
-                        line_range: ((i + 1) as u32, (i + 1) as u32),
+                        line_range: (global_line, global_line),
                         quote: line.to_string(),
                     });
                 }
             }
         }
 
-        if !hits.is_empty() {
+        if hit_count > 0 {
             results.push(EntitySearchSummary {
                 source: entry.source_key.clone(),
                 pages_searched,
-                hit_count: hits.len() as u32,
+                hit_count,
                 hits,
             });
         }
@@ -442,5 +512,54 @@ mod tests {
     fn search_entity_empty_needle_returns_empty() {
         let c = corpus_with(&[("a.txt", extraction_with_text("anything"))]);
         assert!(search_entity(&c, "").is_empty());
+    }
+
+    #[test]
+    fn search_entity_matches_whole_words_only() {
+        // "erp" must not match inside "enterprise".
+        let c = corpus_with(&[("a.txt", extraction_with_text("the enterprise plan"))]);
+        assert!(search_entity(&c, "erp").is_empty());
+        // but a standalone occurrence does match.
+        let c2 = corpus_with(&[("a.txt", extraction_with_text("uses ERP heavily"))]);
+        assert_eq!(search_entity(&c2, "erp").len(), 1);
+    }
+
+    #[test]
+    fn search_entity_reports_document_global_line_numbers() {
+        // pages -> top-level text is "alpha\nbeta vendor gamma"; the hit is on
+        // document-global line 2, and that line round-trips as a citation.
+        let pages = &["alpha", "beta vendor gamma"];
+        let c = corpus_with(&[("p.txt", extraction_with_pages(pages))]);
+        let r = search_entity(&c, "vendor");
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].hits[0].line_range, (2, 2));
+        let cit = citation(
+            "p.txt",
+            (2, 2),
+            "beta vendor gamma",
+            compute_quote_hash("beta vendor gamma"),
+        );
+        assert_eq!(verify_citation(&c, &cit), CitationResult::Matched);
+    }
+
+    #[test]
+    fn cited_span_text_reads_actual_source_not_declared_quote() {
+        let c = corpus_with(&[("a.txt", extraction_with_text("line one\nline two"))]);
+        let cit = citation(
+            "a.txt",
+            (2, 2),
+            "A DIFFERENT DECLARED QUOTE",
+            compute_quote_hash("line two"),
+        );
+        assert_eq!(cited_span_text(&c, &cit).as_deref(), Some("line two"));
+    }
+
+    #[test]
+    fn span_covers_entity_is_whole_word() {
+        assert!(span_covers_entity(
+            "integrates with Zorptech today",
+            "Zorptech"
+        ));
+        assert!(!span_covers_entity("a Zorptechnology thing", "Zorptech"));
     }
 }

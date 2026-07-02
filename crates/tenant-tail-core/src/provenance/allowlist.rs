@@ -171,6 +171,19 @@ pub trait EntityPlausibility: Send + Sync {
 /// first character is uppercase ASCII or it is an all-uppercase acronym
 /// of length >= 2. Lowercase tokens, single characters, and tokens
 /// containing no alphabetic characters do not qualify.
+///
+/// KNOWN LIMITATION (spec 121 FR-016, casing evasion): because plausibility
+/// keys on capitalization, an all-lowercase surface form of a real entity
+/// (`oracle erp` instead of `Oracle ERP`) is NOT flagged, so a producer that
+/// controls the claim text can dodge the "names an external entity, needs a
+/// citation" requirement by lowercasing. Closing this properly needs named-
+/// entity recognition, which FR-016 puts explicitly out of scope (a
+/// lowercase-everything rule would flag ordinary prose and drown operators in
+/// false positives). The residual risk is bounded downstream: any external
+/// entity that IS flagged must be substantiated by a citation whose cited span
+/// actually contains it (validator coverage check), and the corpus search is
+/// case-insensitive. Treat the capitalization signal as a heuristic aid, not a
+/// security boundary.
 pub struct CapitalizationHeuristic;
 
 impl EntityPlausibility for CapitalizationHeuristic {

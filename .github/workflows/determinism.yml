@@ -48,8 +48,8 @@ jobs:
           - { os: windows-latest,   triple: x86_64-pc-windows-msvc }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       # Install the pinned spec-spine governing binary (sha512-locked, offline).
@@ -76,20 +76,34 @@ jobs:
           # each shard, pair it with its repo-relative (forward-slash) path, sort for
           # order-stability, then hash that manifest into one digest. build-meta.json
           # is excluded (its wall-clock `builtAt` is the sole non-deterministic field).
+          #
+          # An EMPTY tree hashes to a fixed, byte-identical digest across every
+          # triple just like a real tree would, so a regeneration that silently
+          # produced zero shards (e.g. a compiler that ran but found nothing)
+          # would vacuously pass the cross-triple comparison below. Refuse to
+          # hash a manifest with zero entries; return non-zero (an assignment
+          # command substitution, so `set -e` aborts the step) instead.
           digest_tree() {
-            local root="$1" manifest
+            local root="$1" manifest count
             manifest="$(mktemp)"
             find "$root" -type f -name '*.json' ! -name 'build-meta.json' \
               | LC_ALL=C sort \
               | while IFS= read -r f; do echo "$(sha256 "$f")  $f"; done > "$manifest"
+            count="$(wc -l < "$manifest" | tr -d ' ')"
+            if [ "$count" -eq 0 ]; then
+              echo "FAIL: $root produced an EMPTY shard tree (0 files); refusing to hash a vacuous manifest" >&2
+              return 1
+            fi
             sha256 "$manifest"
           }
           mkdir -p digests
+          registry_digest="$(digest_tree .derived/spec-registry)"
+          index_digest="$(digest_tree .derived/codebase-index)"
           {
-            echo "${{ matrix.triple }} registry $(digest_tree .derived/spec-registry)"
-            echo "${{ matrix.triple }} index    $(digest_tree .derived/codebase-index)"
+            echo "${{ matrix.triple }} registry ${registry_digest}"
+            echo "${{ matrix.triple }} index    ${index_digest}"
           } | tee "digests/${{ matrix.triple }}.txt"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: digest-${{ matrix.triple }}
           path: digests/${{ matrix.triple }}.txt
@@ -100,7 +114,7 @@ jobs:
     needs: emit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: digests
           pattern: digest-*

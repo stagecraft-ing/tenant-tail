@@ -34,22 +34,49 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,    triple: x86_64-unknown-linux-gnu }
-          - { os: ubuntu-24.04-arm, triple: aarch64-unknown-linux-gnu }
+          # glibc_floor: true selects the cargo-zigbuild path below, which
+          # cross-links against glibc 2.17 so the manylinux_2_17 wheel tag
+          # (py/src/tenant_tail/platform_map.py) is honest. A plain `cargo
+          # build` on these runners links against their host glibc (2.39 on
+          # ubuntu-latest at authoring time), which is newer than 2.17 and
+          # would silently break older-glibc hosts despite the tag's promise.
+          - { os: ubuntu-latest,    triple: x86_64-unknown-linux-gnu,  glibc_floor: true }
+          - { os: ubuntu-24.04-arm, triple: aarch64-unknown-linux-gnu, glibc_floor: true }
           # x86_64-apple-darwin cross-compiles on the Apple Silicon runner.
-          - { os: macos-latest,     triple: x86_64-apple-darwin }
-          - { os: macos-latest,     triple: aarch64-apple-darwin }
-          - { os: windows-latest,   triple: x86_64-pc-windows-msvc }
+          - { os: macos-latest,     triple: x86_64-apple-darwin,  glibc_floor: false }
+          - { os: macos-latest,     triple: aarch64-apple-darwin, glibc_floor: false }
+          - { os: windows-latest,   triple: x86_64-pc-windows-msvc, glibc_floor: false }
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Add target (no-op if native)
         run: rustup target add ${{ matrix.triple }}
+
+      # --- Linux only: build against a pinned glibc floor (D1) -------------
+      # TODO(D1, unvalidated at authoring time): exercise this on the next
+      # tagged release and confirm the resulting binary actually runs on a
+      # glibc-2.17-era host (e.g. a manylinux2014/CentOS 7 container) before
+      # trusting the manylinux_2_17 wheel tag on the strength of this alone.
+      #
+      # cargo-zigbuild auto-detects a `pip`-installed `ziglang` package (it
+      # shells out to `python3 -m ziglang` before falling back to a `zig`
+      # binary on PATH), so no separate Zig download/action is needed here.
+      - name: Install zig + cargo-zigbuild (glibc-floor builds only)
+        if: matrix.glibc_floor
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user ziglang
+          cargo install cargo-zigbuild --locked
+      - name: Build release binary (glibc <= 2.17)
+        if: matrix.glibc_floor
+        run: cargo zigbuild --release --locked --target ${{ matrix.triple }}.2.17 -p tenant-tail-cli
+      # --- Everything else: the toolchain's default (host) glibc / target --
       - name: Build release binary
+        if: ${{ !matrix.glibc_floor }}
         run: cargo build --release --locked --bin tenant-tail --target ${{ matrix.triple }}
 
       - name: Stage archive contents
@@ -60,6 +87,17 @@ jobs:
           mkdir -p staging
           cp "target/${{ matrix.triple }}/release/tenant-tail${EXT}" staging/
           cp LICENSE README.md staging/
+          # Defensive validation before GITHUB_REF_NAME (the pushed tag name)
+          # is embedded into a filename and written to $GITHUB_ENV: refuse
+          # anything that does not look like a release tag, rather than
+          # silently building an oddly-named (or crafted) archive from it.
+          case "${GITHUB_REF_NAME}" in
+            v[0-9]*) ;;
+            *)
+              echo "::error::unexpected tag name '${GITHUB_REF_NAME}' (expected to match ^v[0-9]); refusing to stage a release archive" >&2
+              exit 2
+              ;;
+          esac
           echo "ARCHIVE_BASE=tenant-tail-${GITHUB_REF_NAME}-${{ matrix.triple }}" >> "$GITHUB_ENV"
 
       - name: Package (tar.gz + sha256) for Unix
@@ -89,7 +127,7 @@ jobs:
 
       # --- Supply-chain artifacts: per-target CycloneDX SBOM + provenance ---
       - name: Generate per-target CycloneDX SBOM
-        uses: anchore/sbom-action@v0.24.0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           path: .
           format: cyclonedx-json
@@ -101,11 +139,11 @@ jobs:
           set -euo pipefail
           node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));const n=(d.components||[]).length;console.log('SBOM components:',n);if(n===0){console.error('refusing to ship an SBOM with zero components');process.exit(1);}" "${ARCHIVE_BASE}.cdx.json"
       - name: Attest build provenance for the archive
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: ${{ env.ARCHIVE_FILE }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: archive-${{ matrix.triple }}
           path: |
@@ -123,7 +161,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           pattern: archive-*
@@ -131,7 +169,7 @@ jobs:
       - name: List release assets
         run: ls -la dist
       - name: Create / update the GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*
           fail_on_unmatched_files: true
@@ -142,7 +180,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Publish types, core, cli (tolerate versions already on crates.io)
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -168,7 +206,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Check for NPM_TOKEN
         id: gate
         env:
@@ -181,13 +219,13 @@ jobs:
             echo "::notice title=npm publish skipped::NPM_TOKEN secret not set; skipping npm publish"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: steps.gate.outputs.present == 'true'
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         if: steps.gate.outputs.present == 'true'
         with:
           path: dist/archives
@@ -211,22 +249,36 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           publish_if_absent() {
             local dir="$1" name version
             name="$(node -p "require('./${dir}/package.json').name")"
             version="$(node -p "require('./${dir}/package.json').version")"
             echo "::group::publish ${name}@${version}"
+            # Guarded: npm view exits non-zero for the common "not yet
+            # published" case, so this check must not trip `set -e`.
             if npm view "${name}@${version}" version >/dev/null 2>&1; then
               echo ">> ${name}@${version} already on npm, skipping"
-            else
-              npm publish "${dir}" --access public
+              echo "::endgroup::"
+              return 0
+            fi
+            # Check npm publish's own return code explicitly (mirrors the
+            # publish-crates step's exit-on-failure pattern) rather than
+            # letting a trailing echo reset $? and mask a failed publish.
+            if npm publish "${dir}" --access public; then
               echo ">> published ${name}@${version}"
+            else
+              echo ">> publish failed for ${name}@${version}"
+              echo "::endgroup::"
+              return 1
             fi
             echo "::endgroup::"
           }
           # Platform packages first, then the main package, so there is never a
-          # window where `tenant-tail` is live without its binaries.
+          # window where `tenant-tail` is live without its binaries. A failed
+          # publish_if_absent call is a plain simple command here (not guarded
+          # by if/&&), so `set -e` propagates its failure straight out of the
+          # loop and fails the step; it no longer stays green on a masked error.
           for d in dist/packages/@tenant-tail/*; do
             publish_if_absent "$d"
           done
@@ -237,12 +289,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      # Job-level permissions REPLACE the workflow-level default entirely, so
+      # contents: read must be restated here or actions/checkout below has no
+      # repo read scope at all.
+      contents: read
       id-token: write
     environment:
       name: pypi
       url: https://pypi.org/p/tenant-tail
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       # Gate on the PYPI_TRUSTED_PUBLISHING repo variable (not a secret). Absent
       # or not "true" => a clean skip, never a red X, exactly like publish-npm's
@@ -259,7 +315,7 @@ jobs:
             echo "::notice title=PyPI publish skipped::vars.PYPI_TRUSTED_PUBLISHING is not 'true'; skipping PyPI publish"
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         if: steps.gate.outputs.present == 'true'
         with:
           python-version: "3.12"
@@ -268,7 +324,7 @@ jobs:
         if: steps.gate.outputs.present == 'true'
         run: python -m pip install --upgrade build
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         if: steps.gate.outputs.present == 'true'
         with:
           path: dist/archives
@@ -291,7 +347,7 @@ jobs:
 
       - name: Publish to PyPI (idempotent; signed)
         if: steps.gate.outputs.present == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           packages-dir: py/dist/pypi
           skip-existing: true
