@@ -57,10 +57,14 @@ jobs:
         run: rustup target add ${{ matrix.triple }}
 
       # --- Linux only: build against a pinned glibc floor (D1) -------------
-      # TODO(D1, unvalidated at authoring time): exercise this on the next
-      # tagged release and confirm the resulting binary actually runs on a
-      # glibc-2.17-era host (e.g. a manylinux2014/CentOS 7 container) before
-      # trusting the manylinux_2_17 wheel tag on the strength of this alone.
+      # D1 (validated 2026-07-02): the zigbuild `.2.17` path was confirmed to
+      # produce binaries whose maximum referenced glibc symbol is exactly
+      # GLIBC_2.17, and those binaries run on a real glibc-2.17 userland
+      # (manylinux2014 aarch64 + x86_64 containers, `ldd (GNU libc) 2.17`),
+      # executing the full verify path end to end. The "Assert glibc floor"
+      # step below now guards this on every release build: a toolchain bump
+      # that silently pushed the floor above 2.17 would fail the release
+      # rather than publish a manylinux_2_17 wheel tag that is a lie.
       #
       # cargo-zigbuild auto-detects a `pip`-installed `ziglang` package (it
       # shells out to `python3 -m ziglang` before falling back to a `zig`
@@ -78,6 +82,36 @@ jobs:
       - name: Build release binary
         if: ${{ !matrix.glibc_floor }}
         run: cargo build --release --locked --bin tenant-tail --target ${{ matrix.triple }}
+
+      # D1 guard: the glibc-floor build promises the manylinux_2_17 tag. Assert
+      # it by reading the ELF dynamic symbol table and refusing to publish if
+      # any referenced GLIBC_x.y symbol is newer than the 2.17 floor (which a
+      # toolchain drift could reintroduce). readelf ships with binutils on the
+      # ubuntu runners where the glibc-floor builds run.
+      - name: Assert glibc floor (manylinux_2_17 tag is truthful)
+        if: matrix.glibc_floor
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLOOR="2.17"
+          BIN="target/${{ matrix.triple }}/release/tenant-tail"
+          # Every glibc-versioned symbol the binary imports, stripped to its
+          # numeric version, highest last under version sort.
+          MAX="$(readelf --dyn-syms --wide "$BIN" \
+            | grep -oE 'GLIBC_[0-9]+\.[0-9]+(\.[0-9]+)?' \
+            | sed 's/GLIBC_//' | sort -uV | tail -1)"
+          echo "max referenced glibc symbol: GLIBC_${MAX:-<none>} (floor GLIBC_${FLOOR})"
+          if [ -z "$MAX" ]; then
+            echo "::error::no GLIBC version symbols found in ${BIN}; this binary links glibc dynamically, so an empty scan means the check is broken, not that the floor is safe" >&2
+            exit 1
+          fi
+          # MAX <= FLOOR holds iff the larger of the two, by version sort, is FLOOR.
+          BIGGEST="$(printf '%s\n%s\n' "$MAX" "$FLOOR" | sort -V | tail -1)"
+          if [ "$BIGGEST" != "$FLOOR" ]; then
+            echo "::error::${BIN} references GLIBC_${MAX}, above the manylinux_2_17 floor (GLIBC_${FLOOR}); the wheel/npm glibc tag would be a lie" >&2
+            exit 1
+          fi
+          echo "OK: glibc floor honored, the manylinux_2_17 tag is truthful"
 
       - name: Stage archive contents
         shell: bash
