@@ -12,14 +12,14 @@
     "rust",
     "tenant"
   ],
-  "homepage": "https://github.com/bartekus/tenant-tail#readme",
+  "homepage": "https://github.com/stagecraft-ing/tenant-tail#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bartekus/tenant-tail.git",
+    "url": "git+https://github.com/stagecraft-ing/tenant-tail.git",
     "directory": "npm"
   },
   "bugs": {
-    "url": "https://github.com/bartekus/tenant-tail/issues"
+    "url": "https://github.com/stagecraft-ing/tenant-tail/issues"
   },
   "license": "Apache-2.0",
   "author": "The tenant-tail Authors",
