@@ -4,8 +4,8 @@
     "name": "tenant-tail",
     "path": "npm",
     "specRef": "003-distribution",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "schemaVersion": "1.1.0",
-  "shardHash": "e707cae56fdc0256569677c395324f8a4a6bbf3159d519127159725ae3abd48d"
+  "shardHash": "0871a336d4b4e2fcdd151105ec9f577b0b7b3a5b88bf9063ed913f6929302c96"
 }
