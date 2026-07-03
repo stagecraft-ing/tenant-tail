@@ -39,9 +39,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bartekus/tenant-tail"
-Repository = "https://github.com/bartekus/tenant-tail"
-Issues = "https://github.com/bartekus/tenant-tail/issues"
+Homepage = "https://github.com/stagecraft-ing/tenant-tail"
+Repository = "https://github.com/stagecraft-ing/tenant-tail"
+Issues = "https://github.com/stagecraft-ing/tenant-tail/issues"
 
 # Same command name on every host. On a supported host the platform wheel's
 # bundled binary provides `tenant-tail`; on an unsupported host this sdist

@@ -169,7 +169,7 @@ function platformPackageJson(target, version) {
     license: 'Apache-2.0',
     repository: {
       type: 'git',
-      url: 'git+https://github.com/bartekus/tenant-tail.git',
+      url: 'git+https://github.com/stagecraft-ing/tenant-tail.git',
     },
     os: [t.os],
     cpu: [t.cpu],

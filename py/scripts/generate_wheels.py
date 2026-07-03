@@ -160,9 +160,9 @@ def _metadata(version: str, requires_python: str) -> bytes:
         "in the producer. Ships the prebuilt binary; no Rust toolchain required.\n"
         "License-Expression: Apache-2.0\n"
         "License-File: LICENSE\n"
-        "Project-URL: Homepage, https://github.com/bartekus/tenant-tail\n"
-        "Project-URL: Repository, https://github.com/bartekus/tenant-tail\n"
-        "Project-URL: Issues, https://github.com/bartekus/tenant-tail/issues\n"
+        "Project-URL: Homepage, https://github.com/stagecraft-ing/tenant-tail\n"
+        "Project-URL: Repository, https://github.com/stagecraft-ing/tenant-tail\n"
+        "Project-URL: Issues, https://github.com/stagecraft-ing/tenant-tail/issues\n"
         "Keywords: governance,verification,certificate,provenance,attestation,cli,rust,tenant\n"
         "Classifier: Development Status :: 4 - Beta\n"
         "Classifier: Environment :: Console\n"
@@ -173,7 +173,7 @@ def _metadata(version: str, requires_python: str) -> bytes:
         "\n"
         "Prebuilt `tenant-tail` binary wheel. The binary is installed to your "
         "environment's scripts directory; `tenant-tail`/`uvx tenant-tail` runs it "
-        "directly. See https://github.com/bartekus/tenant-tail#readme.\n"
+        "directly. See https://github.com/stagecraft-ing/tenant-tail#readme.\n"
     )
     return body.encode("utf-8")
 
