@@ -11,7 +11,7 @@
     "spec:check": "spec-spine compile && spec-spine index check && spec-spine lint --fail-on-warn"
   },
   "devDependencies": {
-    "spec-spine": "0.8.0"
+    "spec-spine": "0.10.0"
   },
   "tenant-tail": {
     "spec": "000-tenant-tail-bootstrap"
