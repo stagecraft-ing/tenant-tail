@@ -18,7 +18,7 @@ tenant-tail verify-certificate <certificate.json> [OPTIONS]
 
 - `--artifact-dir <dir>`: Directory containing stage artifacts for hash re-derivation. If provided, the verifier reads the files and ensures their hashes match the certificate.
 - `--platform-jwks <file>`: Path to a saved platform JWKS JSON file for offline seal verification.
-- `--require-sealed`: Exit `1` if there is no verifiable platform countersign. By default, an unsealed certificate is reported visually but exits `0`.
+- `--allow-unsealed`: Accept a certificate with no verifiable platform countersign. By default, an unsealed certificate (or a sealed one with no `--platform-jwks` to adjudicate it) is **rejected** with exit `1`; this flag demotes that to a visible notice with exit `0`.
 - `--corpus-attestation <file>`: Link-check the certificate's corpus binding against this attestation file.
 
 ## Offline Verification
@@ -33,7 +33,7 @@ When you pass `--artifact-dir`, `tenant-tail` reads the artifacts recorded in th
 
 A certificate may carry a platform countersign. 
 - If you supply `--platform-jwks`, the countersign is verified against the keyset.
-- If you supply `--require-sealed` and the certificate lacks a countersign (or lacks a JWKS to verify it), the command fails closed (exit `1`).
+- By default, if the certificate lacks a countersign (or lacks a JWKS to verify it), the command fails closed (exit `1`): the platform countersign is what binds the run to its admission contract. Pass `--allow-unsealed` to accept it as a visible notice instead.
 
 ## Corpus Binding Link-Check
 

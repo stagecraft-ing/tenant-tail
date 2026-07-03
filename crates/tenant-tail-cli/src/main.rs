@@ -63,10 +63,19 @@ struct VerifyCertificateArgs {
     #[arg(long)]
     platform_jwks: Option<PathBuf>,
 
-    /// Fail (exit 1) when the certificate carries no verifiable platform
-    /// countersign. Default posture reports unsealed certificates as a
-    /// visible notice with exit 0.
+    /// Accept a certificate whose platform countersign cannot be verified: one
+    /// carrying no countersign at all, or a sealed one with no `--platform-jwks`
+    /// to adjudicate it. By DEFAULT such a certificate is REJECTED (exit 1): the
+    /// countersign is what binds the run to its admission contract, so the
+    /// trust-nobody posture fails closed on its absence (spec 198 FR-014). This
+    /// opt-out demotes that rejection to a visible notice with exit 0.
     #[arg(long)]
+    allow_unsealed: bool,
+
+    /// Deprecated: sealing is now required by default, so this flag is a no-op
+    /// kept so existing invocations keep working. Pass `--allow-unsealed` to opt
+    /// out of the sealed requirement.
+    #[arg(long, hide = true)]
     require_sealed: bool,
 
     /// Path to a corpus attestation artifact to check the certificate's
@@ -189,11 +198,22 @@ fn verify_certificate_cmd(args: VerifyCertificateArgs) -> ExitCode {
         None => None,
     };
 
+    // The platform seal is required by default (trust-nobody, spec 198 FR-014);
+    // --allow-unsealed opts out. The deprecated --require-sealed is now the
+    // default, so it is accepted as a no-op with a one-line notice.
+    if args.require_sealed {
+        eprintln!(
+            "note: --require-sealed is deprecated and now the default; sealing is required \
+             unless --allow-unsealed is passed"
+        );
+    }
+    let seal_required = !args.allow_unsealed;
+
     let result = verify_certificate_with_platform(
         &cert,
         args.artifact_dir.as_deref(),
         jwks.as_ref(),
-        args.require_sealed,
+        seal_required,
         corpus_attestation.as_deref(),
         args.sbom_dir.as_deref(),
     );

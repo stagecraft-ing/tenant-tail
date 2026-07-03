@@ -45,10 +45,11 @@ To verify a governance certificate, you can use the real fixture shipped in the 
 ```bash
 npx --no-install tenant-tail verify-certificate \
   ./crates/tenant-tail-core/tests/fixtures/cert-run/governance-certificate.json \
-  --artifact-dir ./crates/tenant-tail-core/tests/fixtures/cert-run
+  --artifact-dir ./crates/tenant-tail-core/tests/fixtures/cert-run \
+  --allow-unsealed
 ```
 
-A successful verification returns exit code `0` and outputs a verified result:
+The fixture carries no platform countersign, so `--allow-unsealed` is required: by default `tenant-tail` fails closed (exit `1`) on an unsealed certificate. With the flag, a successful verification returns exit code `0` and outputs a verified result:
 
 ```text
 governance certificate VERIFIED (pipeline: cert-run, status: complete)

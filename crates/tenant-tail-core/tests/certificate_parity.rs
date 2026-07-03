@@ -13,7 +13,9 @@
 //!     --business-docs <doc> --out <run-dir>/governance-certificate.json
 
 use std::path::{Path, PathBuf};
-use tenant_tail_core::{GovernanceCertificate, verify_certificate};
+use tenant_tail_core::{
+    GovernanceCertificate, verify_certificate, verify_certificate_with_platform,
+};
 
 fn fixture_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cert-run")
@@ -93,5 +95,44 @@ fn tampered_artifact_on_disk_is_rejected() {
             .any(|e| e.contains("artifact hash mismatch")),
         "expected an artifact hash mismatch; got {:?}",
         result.errors
+    );
+}
+
+#[test]
+fn unsealed_fixture_fails_closed_when_seal_required() {
+    // The real fixture is validly signed but carries no platform countersign.
+    // With the seal required (the default posture, spec 198 FR-014), the offline
+    // chain still holds but the absent countersign is an error: the result is
+    // rejected and the reason names the unsealed state.
+    let (cert, dir) = load_fixture();
+    let result = verify_certificate_with_platform(&cert, Some(&dir), None, true, None, None);
+    assert!(
+        !result.valid,
+        "an unsealed certificate must fail closed when the seal is required; errors: {:?}",
+        result.errors
+    );
+    assert!(
+        result.errors.iter().any(|e| e.contains("UNSEALED")),
+        "expected an unsealed rejection; errors: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn unsealed_fixture_is_a_notice_when_unsealed_allowed() {
+    // The same fixture with the seal requirement lifted (--allow-unsealed): the
+    // offline chain verifies and the unsealed state is a visible notice, never
+    // silently equivalent to sealed.
+    let (cert, dir) = load_fixture();
+    let result = verify_certificate_with_platform(&cert, Some(&dir), None, false, None, None);
+    assert!(
+        result.valid,
+        "unsealed-allowed must verify the offline chain; errors: {:?}",
+        result.errors
+    );
+    assert!(
+        result.notices.iter().any(|n| n.contains("UNSEALED")),
+        "expected a verifiable-but-unsealed notice; notices: {:?}",
+        result.notices
     );
 }

@@ -25,7 +25,7 @@ A **governance certificate** is a JSON artifact asserting the state of a build. 
 
 ## Platform Countersign
 
-A **platform countersign** is an optional JWS signature applied by the platform admitting the run. A certificate can be **sealed** (countersign verified against a JWKS) or **unsealed** (no countersign).
+A **platform countersign** is an optional JWS signature applied by the platform admitting the run. A certificate can be **sealed** (countersign verified against a JWKS) or **unsealed** (no countersign). By default the verifier requires a verifiable seal and rejects an unsealed certificate (exit `1`); `--allow-unsealed` opts out, reporting the unsealed state as a visible notice (exit `0`).
 
 ## Corpus Binding States
 
