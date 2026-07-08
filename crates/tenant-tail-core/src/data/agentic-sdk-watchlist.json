@@ -1,0 +1,32 @@
+{
+  "_comment": "Agent / LLM SDK watchlist (spec 210 FR-003). The falsifiability data behind the Build Spec agentic_posture declaration. When a produced application's governance certificate binds posture 'none' (authored OR defaulted) yet its CycloneDX SBOM (spec 203, .factory/sbom.cdx.json) carries a dependency whose name matches an entry here, tenant-tail verify-certificate fails the cross-check with a diagnostic naming the package. A dependency on a model-SDK family is not proof of an agent loop, but it is the tripwire that forces the 'none' declaration to be revisited. STATED RESIDUAL: a watchlist MISS is not proof of absence of agency; the verifier reports a miss as a notice, never a silent pass. Matching is by CycloneDX components[].name (exact) or components[].purl (the package-name segment, anchored exact-equal, tolerating the npm %40 scope encoding). This mirrors OAP's standards/schemas/factory/agentic-sdk-watchlist.yaml (same names).",
+  "schema_version": "1.0.0",
+  "packages": [
+    { "ecosystem": "npm", "name": "@anthropic-ai/sdk", "note": "Anthropic Claude API SDK" },
+    { "ecosystem": "npm", "name": "@anthropic-ai/bedrock-sdk", "note": "Anthropic Claude via AWS Bedrock" },
+    { "ecosystem": "npm", "name": "@anthropic-ai/vertex-sdk", "note": "Anthropic Claude via Google Vertex" },
+    { "ecosystem": "npm", "name": "@anthropic-ai/claude-agent-sdk", "note": "Anthropic agent SDK (tool-use / agent loops)" },
+    { "ecosystem": "npm", "name": "openai", "note": "OpenAI API SDK" },
+    { "ecosystem": "npm", "name": "@azure/openai", "note": "Azure OpenAI SDK" },
+    { "ecosystem": "npm", "name": "@google/generative-ai", "note": "Google Gemini generative-AI SDK" },
+    { "ecosystem": "npm", "name": "@google-cloud/vertexai", "note": "Google Vertex AI SDK" },
+    { "ecosystem": "npm", "name": "@mistralai/mistralai", "note": "Mistral AI SDK" },
+    { "ecosystem": "npm", "name": "cohere-ai", "note": "Cohere SDK" },
+    { "ecosystem": "npm", "name": "@aws-sdk/client-bedrock-runtime", "note": "AWS Bedrock runtime (model invocation)" },
+    { "ecosystem": "npm", "name": "@huggingface/inference", "note": "Hugging Face inference SDK" },
+    { "ecosystem": "npm", "name": "groq-sdk", "note": "Groq inference SDK" },
+    { "ecosystem": "npm", "name": "replicate", "note": "Replicate model-hosting SDK" },
+    { "ecosystem": "npm", "name": "ollama", "note": "Ollama local-model client" },
+    { "ecosystem": "npm", "name": "ai", "note": "Vercel AI SDK (model calls, tool loops)" },
+    { "ecosystem": "npm", "name": "@ai-sdk/anthropic", "note": "Vercel AI SDK Anthropic provider" },
+    { "ecosystem": "npm", "name": "@ai-sdk/openai", "note": "Vercel AI SDK OpenAI provider" },
+    { "ecosystem": "npm", "name": "langchain", "note": "LangChain agent/orchestration framework" },
+    { "ecosystem": "npm", "name": "@langchain/core", "note": "LangChain core" },
+    { "ecosystem": "npm", "name": "@langchain/anthropic", "note": "LangChain Anthropic integration" },
+    { "ecosystem": "npm", "name": "@langchain/openai", "note": "LangChain OpenAI integration" },
+    { "ecosystem": "npm", "name": "@langchain/langgraph", "note": "LangGraph stateful agent graphs" },
+    { "ecosystem": "npm", "name": "llamaindex", "note": "LlamaIndex data-framework / agents" },
+    { "ecosystem": "npm", "name": "@mastra/core", "note": "Mastra agent framework" },
+    { "ecosystem": "npm", "name": "@openai/agents", "note": "OpenAI Agents SDK" }
+  ]
+}

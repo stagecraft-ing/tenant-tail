@@ -13,6 +13,10 @@
         "source": "spec-edge"
       },
       {
+        "path": "crates/tenant-tail-core/src/data/agentic-sdk-watchlist.json",
+        "source": "spec-edge"
+      },
+      {
         "path": "crates/tenant-tail-core/src/inter_stage_manifest.rs",
         "source": "spec-edge"
       },
@@ -58,6 +62,19 @@
         "unit": {
           "kind": "file",
           "path": "crates/tenant-tail-core/src/certificate.rs"
+        }
+      },
+      {
+        "locations": [
+          {
+            "file": "crates/tenant-tail-core/src/data/agentic-sdk-watchlist.json"
+          }
+        ],
+        "ownership": true,
+        "sourceField": "establishes",
+        "unit": {
+          "kind": "file",
+          "path": "crates/tenant-tail-core/src/data/agentic-sdk-watchlist.json"
         }
       },
       {
@@ -130,5 +147,5 @@
     "specStatus": "draft"
   },
   "schemaVersion": "1.1.0",
-  "shardHash": "d1f739d378a34a3a57dae2d6b0e31fa8829877f4f7e929a40d2a81e6e5b8afcf"
+  "shardHash": "413c2ce877e507a6f2441cdc6f6dca583aa0d24eb717249972ac06cb8a5c91b1"
 }

@@ -14,6 +14,10 @@
       },
       {
         "kind": "file",
+        "path": "crates/tenant-tail-core/src/data/agentic-sdk-watchlist.json"
+      },
+      {
+        "kind": "file",
         "path": "crates/tenant-tail-core/src/inter_stage_manifest.rs"
       },
       {
@@ -55,9 +59,9 @@
     ],
     "specPath": "specs/001-certificate-verify-core/spec.md",
     "status": "draft",
-    "summary": "The governance-certificate verify engine, extracted verify-only from OAP's factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the certificate self-hash, verifies the Ed25519 engine signature, re-checks stage artifact hashes against files on disk, replays the signed inter-stage manifest chain, adjudicates the optional platform countersign offline, and checks the optional corpus binding by reference (spec 218). The emitter (builder, signing-key handling, generation) is excluded by construction; the one spec-spine seam is feature-gated OFF so the vended build links no spec-spine crate.\n",
+    "summary": "The governance-certificate verify engine, extracted verify-only from OAP's factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the certificate self-hash, verifies the Ed25519 engine signature, re-checks stage artifact hashes against files on disk, replays the signed inter-stage manifest chain, adjudicates the optional platform countersign offline, checks the optional corpus binding by reference (spec 218), and adjudicates the optional agentic-posture binding (spec 210: internal consistency, plus a SBOM watchlist cross-check under `--sbom-dir`). The emitter (builder, signing-key handling, generation) is excluded by construction; the one spec-spine seam is feature-gated OFF so the vended build links no spec-spine crate.\n",
     "title": "Certificate verify core (offline governance-certificate verification)"
   },
-  "shardHash": "88c2df16ff42d798b862b2b618baa170e43d18781db63fe1e1311f5684f416d0",
+  "shardHash": "c4dadc389da98bfc4f0ec46b3930d114ff9ff241a6879ca488dbf3b652b1c6c8",
   "specVersion": "1.1.0"
 }

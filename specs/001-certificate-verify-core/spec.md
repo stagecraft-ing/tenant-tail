@@ -12,14 +12,17 @@ summary: >
   factory-engine and relicensed Apache-2.0 (see NOTICE). Re-derives the
   certificate self-hash, verifies the Ed25519 engine signature, re-checks stage
   artifact hashes against files on disk, replays the signed inter-stage manifest
-  chain, adjudicates the optional platform countersign offline, and checks the
-  optional corpus binding by reference (spec 218). The emitter
+  chain, adjudicates the optional platform countersign offline, checks the
+  optional corpus binding by reference (spec 218), and adjudicates the optional
+  agentic-posture binding (spec 210: internal consistency, plus a SBOM watchlist
+  cross-check under `--sbom-dir`). The emitter
   (builder, signing-key handling, generation) is excluded by construction; the
   one spec-spine seam is feature-gated OFF so the vended build links no
   spec-spine crate.
 depends_on: ["000-tenant-tail-bootstrap"]
 establishes:
   - { kind: file, path: "crates/tenant-tail-core/src/certificate.rs" }
+  - { kind: file, path: "crates/tenant-tail-core/src/data/agentic-sdk-watchlist.json" }
   - { kind: file, path: "crates/tenant-tail-core/src/inter_stage_manifest.rs" }
   - { kind: file, path: "crates/tenant-tail-core/src/platform_jws.rs" }
   - { kind: file, path: "crates/tenant-tail-core/src/lib.rs" }
@@ -42,11 +45,17 @@ relicensed Apache-2.0.
 ## 2. Territory
 
 - `crates/tenant-tail-core/src/certificate.rs`: the certificate data types
-  (including the additive `CorpusBinding` and `SbomArtifactBinding`, byte-identical
-  to the emitter's) and the verify functions (`verify_certificate`,
-  `verify_certificate_with_platform`, `compute_certificate_hash`, the Ed25519
-  signature check, and the corpus/SBOM binding adjudicators
-  `adjudicate_corpus_binding_state` / `adjudicate_sbom_binding_state`).
+  (including the additive `CorpusBinding`, `SbomArtifactBinding`, and
+  `AgenticPostureBinding` / `CertAgenticSurface`, byte-identical to the emitter's)
+  and the verify functions (`verify_certificate`, `verify_certificate_with_platform`,
+  `compute_certificate_hash`, the Ed25519 signature check, and the
+  corpus/SBOM/posture adjudicators `adjudicate_corpus_binding_state` /
+  `adjudicate_sbom_binding_state` / `adjudicate_agentic_posture` +
+  `agentic_posture_binding_inconsistencies`).
+- `crates/tenant-tail-core/src/data/agentic-sdk-watchlist.json`: the agent/LLM SDK
+  watchlist (spec 210 FR-003), embedded via `include_str!` so the verifier stays
+  self-contained and adds no YAML dependency. Mirrors OAP's
+  `standards/schemas/factory/agentic-sdk-watchlist.yaml` (same package names).
 - `crates/tenant-tail-core/src/inter_stage_manifest.rs`: the inter-stage
   manifest types and `verify_manifest` (replayed by the certificate verifier).
 - `crates/tenant-tail-core/src/platform_jws.rs`: compact-JWS verification for
@@ -93,8 +102,35 @@ relicensed Apache-2.0.
   notices, while a `bom`/`audit` hash mismatch or an unreadable artifact is an
   error. The field is additive and optional, so an unbound certificate serialises
   byte-identically and the parity fixture is unaffected.
+- The agentic-posture binding (spec 210) MUST be carried and adjudicated. It is
+  carried first for HASH PARITY: `compute_certificate_hash` round-trips the
+  certificate through the typed struct, so a `agenticPostureBinding` the verifier
+  did not know would be dropped on re-serialisation and the re-derived hash (and
+  the signature check) would diverge from the emitter's. Beyond carrying it, the
+  verifier adjudicates the binding in two parts:
+  (a) INTERNAL CONSISTENCY (no BOM needed, `agentic_posture_binding_inconsistencies`):
+  `none` must enumerate no surfaces; `declared`/`governed` must enumerate at least
+  one; a `governed` surface must carry a `governance_envelope` that shape-validates
+  as a spec-198 envelope (FR-004); an unknown posture is an error. A validly-signed
+  but self-inconsistent binding is rejected.
+  (b) SBOM CROSS-CHECK (`--sbom-dir`, `adjudicate_agentic_posture`): only a `none`
+  posture (authored OR defaulted) is falsifiable this way. A `none` whose CycloneDX
+  BOM carries a watchlisted agent/LLM SDK dependency is CONTRADICTED (an error
+  naming the package); `declared`/`governed` acknowledge agency and never fail on a
+  match. A watchlist MISS is a stated-residual notice, never a silent pass; a
+  missing `--sbom-dir` is a `present-but-unverified` notice (the posture is already
+  bound + internally consistency-checked; the BOM is optional falsifiability
+  evidence). The field is additive and optional, so an unbound certificate
+  serialises byte-identically and the parity fixture is unaffected.
+  The FR-004 governed-envelope check is a TOP-LEVEL shape check (recognised
+  `schema_version` + required spec-198 sections present with correct JSON types),
+  not the full nested `factory_contracts::GovernanceEnvelope` validation OAP's
+  in-tree verifier performs; tenant-tail (Apache-2.0) does not vendor that type.
 - Behavior parity: a certificate emitted by OAP's in-tree emitter MUST verify
-  here unchanged (the parity test is the gate).
+  here unchanged (the parity test is the gate). A certificate emitted by
+  `tenant-emit` carrying an `agenticPostureBinding` MUST likewise verify here (the
+  hash re-derives through the carried field); tampering the bound posture MUST fail
+  the signature + hash check (spec 210 AC-2).
 
 ## 4. Out of scope
 
