@@ -1307,7 +1307,8 @@ struct AgenticSdkWatchlist {
 
 #[derive(Debug, Clone, Deserialize)]
 struct WatchlistEntry {
-    #[allow(dead_code)]
+    /// The purl `<type>` a match is gated on (e.g. `npm`), so a watchlisted name
+    /// only matches a dependency from the same ecosystem.
     ecosystem: String,
     name: String,
     #[serde(default)]
@@ -1328,15 +1329,23 @@ fn load_agentic_sdk_watchlist() -> AgenticSdkWatchlist {
 /// `ai` matches `pkg:npm/ai@x` but NOT `pkg:npm/%40scope/ai@x` (whose name is
 /// `@scope/ai`). This is the fix for OAP's substring `purl_matches`, which
 /// over-flagged any `@scope/ai`-style package via the `/ai@` substring.
-fn purl_matches(purl: &str, name: &str) -> bool {
+///
+/// The purl `<type>` MUST match the watchlist entry's `ecosystem`, so a
+/// `pkg:pypi/openai@1.0.0` or `pkg:cargo/ai@0.1.0` never matches the npm `openai`
+/// / `ai` entries on a mixed-language BOM (spec 210 FR-003: the watchlist is
+/// ecosystem-scoped).
+fn purl_matches(purl: &str, name: &str, ecosystem: &str) -> bool {
     let decoded = purl.replace("%40", "@");
     // Drop qualifiers (`?a=b`) / subpath (`#...`) so the version boundary is clear.
     let core = decoded.split(['?', '#']).next().unwrap_or(decoded.as_str());
-    // Strip the `pkg:<type>/` scheme prefix to get the coordinate (name[@version]).
-    let coord = match core.split_once('/') {
-        Some((scheme, rest)) if scheme.starts_with("pkg:") => rest,
-        _ => core,
+    // Split `pkg:<type>/<coord>`; gate on the type matching the entry's ecosystem.
+    let (ptype, coord) = match core.split_once('/') {
+        Some((scheme, rest)) if scheme.starts_with("pkg:") => (&scheme["pkg:".len()..], rest),
+        _ => ("", core),
     };
+    if !ptype.eq_ignore_ascii_case(ecosystem) {
+        return false;
+    }
     // The version is separated by the LAST '@' (a scoped name's leading '@' is at
     // index 0, never the separator). Anchor on the full name segment, exact-equal.
     let pkg_name = match coord.rsplit_once('@') {
@@ -1354,26 +1363,42 @@ fn first_watchlist_match_in_bom(bom_bytes: &[u8]) -> Option<String> {
     let v: serde_json::Value = serde_json::from_slice(bom_bytes).ok()?;
     let watchlist = load_agentic_sdk_watchlist();
 
-    fn walk(node: &serde_json::Value, wl: &AgenticSdkWatchlist) -> Option<String> {
+    // A BOM is an untrusted build artefact (`--sbom-dir` is caller-supplied), so
+    // the recursive component walk is depth-bounded: a pathologically nested BOM
+    // stops at MAX_BOM_DEPTH rather than overflowing the stack. Real CycloneDX
+    // nesting is shallow, so this never truncates a legitimate BOM.
+    const MAX_BOM_DEPTH: usize = 64;
+
+    fn walk(node: &serde_json::Value, wl: &AgenticSdkWatchlist, depth: usize) -> Option<String> {
+        if depth > MAX_BOM_DEPTH {
+            return None;
+        }
         let arr = node.get("components")?.as_array()?;
         for c in arr {
             let name = c.get("name").and_then(|n| n.as_str());
             let purl = c.get("purl").and_then(|p| p.as_str());
             for entry in &wl.packages {
-                if name == Some(entry.name.as_str())
-                    || purl.is_some_and(|p| purl_matches(p, &entry.name))
-                {
+                // When the component carries a purl, gate on it (the purl encodes
+                // the ecosystem, so a pkg:pypi/openai never matches npm `openai`).
+                // Without a purl, fall back to a best-effort name match
+                // (cyclonedx-npm always emits purls; this covers hand-authored or
+                // non-npm BOM entries only).
+                let matched = match purl {
+                    Some(p) => purl_matches(p, &entry.name, &entry.ecosystem),
+                    None => name == Some(entry.name.as_str()),
+                };
+                if matched {
                     return Some(entry.name.clone());
                 }
             }
-            if let Some(hit) = walk(c, wl) {
+            if let Some(hit) = walk(c, wl, depth + 1) {
                 return Some(hit);
             }
         }
         None
     }
 
-    walk(&v, &watchlist)
+    walk(&v, &watchlist, 0)
 }
 
 /// Spec 210 FR-003 -- the outcome of cross-checking a certificate's agentic
@@ -1453,9 +1478,17 @@ fn append_posture_binding_findings(
     result: &mut VerificationResult,
 ) {
     if let Some(binding) = &cert.agentic_posture_binding {
-        result
-            .errors
-            .extend(agentic_posture_binding_inconsistencies(binding));
+        let inconsistencies = agentic_posture_binding_inconsistencies(binding);
+        let had_inconsistency = !inconsistencies.is_empty();
+        result.errors.extend(inconsistencies);
+        if had_inconsistency {
+            // Internal consistency already failed (e.g. an unknown posture
+            // string like "maybe"). The SBOM cross-check below would fold that
+            // non-"none" posture into a reassuring "DECLARED (agency
+            // acknowledged)" notice, contradicting the error on the same
+            // binding, so skip it: the inconsistency error is authoritative.
+            return;
+        }
     }
     match adjudicate_agentic_posture(cert.agentic_posture_binding.as_ref(), sbom_dir) {
         PostureCrossCheckOutcome::Unbound => {
@@ -2210,25 +2243,38 @@ mod tests {
     #[test]
     fn purl_matcher_anchors_on_the_name_segment() {
         // Unscoped exact.
-        assert!(purl_matches("pkg:npm/ai@3.0.0", "ai"));
+        assert!(purl_matches("pkg:npm/ai@3.0.0", "ai", "npm"));
         // The bug: a scoped package ending in /ai must NOT match the bare `ai`.
-        assert!(!purl_matches("pkg:npm/%40langchain/ai@0.3.0", "ai"));
-        assert!(!purl_matches("pkg:npm/@langchain/ai@0.3.0", "ai"));
+        assert!(!purl_matches("pkg:npm/%40langchain/ai@0.3.0", "ai", "npm"));
+        assert!(!purl_matches("pkg:npm/@langchain/ai@0.3.0", "ai", "npm"));
         // Scoped exact (decoded and literal `@`).
         assert!(purl_matches(
             "pkg:npm/%40anthropic-ai/sdk@0.20.0",
-            "@anthropic-ai/sdk"
+            "@anthropic-ai/sdk",
+            "npm"
         ));
         assert!(purl_matches(
             "pkg:npm/@anthropic-ai/sdk@0.20.0",
-            "@anthropic-ai/sdk"
+            "@anthropic-ai/sdk",
+            "npm"
         ));
         // No-version coordinate still resolves.
-        assert!(purl_matches("pkg:npm/ai", "ai"));
+        assert!(purl_matches("pkg:npm/ai", "ai", "npm"));
         // Qualifiers/subpath tolerated.
-        assert!(purl_matches("pkg:npm/openai@4.0.0?foo=bar", "openai"));
+        assert!(purl_matches("pkg:npm/openai@4.0.0?foo=bar", "openai", "npm"));
         // A different unscoped package is not a match.
-        assert!(!purl_matches("pkg:npm/aims@1.0.0", "ai"));
+        assert!(!purl_matches("pkg:npm/aims@1.0.0", "ai", "npm"));
+    }
+
+    #[test]
+    fn purl_matcher_gates_on_ecosystem() {
+        // A same-named package from a DIFFERENT ecosystem must NOT match the npm
+        // watchlist entry: no cross-ecosystem false positive on a mixed BOM.
+        assert!(!purl_matches("pkg:pypi/openai@1.0.0", "openai", "npm"));
+        assert!(!purl_matches("pkg:cargo/ai@0.1.0", "ai", "npm"));
+        // Same ecosystem still matches (case-insensitive type).
+        assert!(purl_matches("pkg:npm/openai@4.0.0", "openai", "npm"));
+        assert!(purl_matches("pkg:NPM/openai@4.0.0", "openai", "npm"));
     }
 
     // Through the append hook (the verify surface).
@@ -2264,6 +2310,27 @@ mod tests {
                 .any(|e| e.contains("contradicted") && e.contains("openai")),
             "expected a contradiction error: {:?}",
             result.errors
+        );
+    }
+
+    #[test]
+    fn posture_findings_unknown_posture_errors_without_declared_notice() {
+        // An unknown posture string is internally inconsistent (an error) and must
+        // NOT also emit the reassuring "DECLARED (agency acknowledged)" cross-check
+        // notice for the same binding: the two would contradict each other.
+        let mut cert = minimal_cert(None);
+        cert.agentic_posture_binding = Some(posture("maybe", false, vec![]));
+        let mut result = empty_result();
+        append_posture_binding_findings(&cert, None, &mut result);
+        assert!(
+            result.errors.iter().any(|e| e.contains("unknown posture")),
+            "expected an unknown-posture error: {:?}",
+            result.errors
+        );
+        assert!(
+            !result.notices.iter().any(|n| n.contains("DECLARED")),
+            "an unknown posture must not emit a reassuring DECLARED notice: {:?}",
+            result.notices
         );
     }
 
