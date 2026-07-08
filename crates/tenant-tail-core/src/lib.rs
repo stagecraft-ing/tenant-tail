@@ -22,8 +22,10 @@ pub mod provenance;
 
 // Cert verify surface, re-exported at the crate root for the CLI verbs.
 pub use certificate::{
-    CERTIFICATE_VERSION, CorpusBinding, CorpusBindingState, GovernanceCertificate,
-    SbomArtifactBinding, SbomBindingState, VerificationResult, adjudicate_corpus_binding_state,
-    adjudicate_sbom_binding_state, verify_certificate, verify_certificate_with_platform,
+    AgenticPostureBinding, CERTIFICATE_VERSION, CertAgenticSurface, CorpusBinding,
+    CorpusBindingState, GovernanceCertificate, PostureCrossCheckOutcome, SbomArtifactBinding,
+    SbomBindingState, VerificationResult, adjudicate_agentic_posture,
+    adjudicate_corpus_binding_state, adjudicate_sbom_binding_state,
+    agentic_posture_binding_inconsistencies, verify_certificate, verify_certificate_with_platform,
 };
 pub use platform_jws::PlatformJwks;
