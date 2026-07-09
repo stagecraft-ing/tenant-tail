@@ -2261,7 +2261,11 @@ mod tests {
         // No-version coordinate still resolves.
         assert!(purl_matches("pkg:npm/ai", "ai", "npm"));
         // Qualifiers/subpath tolerated.
-        assert!(purl_matches("pkg:npm/openai@4.0.0?foo=bar", "openai", "npm"));
+        assert!(purl_matches(
+            "pkg:npm/openai@4.0.0?foo=bar",
+            "openai",
+            "npm"
+        ));
         // A different unscoped package is not a match.
         assert!(!purl_matches("pkg:npm/aims@1.0.0", "ai", "npm"));
     }
