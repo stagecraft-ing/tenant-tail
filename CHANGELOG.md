@@ -5,6 +5,24 @@ All notable changes to tenant-tail are recorded here. The format follows
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the version
 is below 1.0, a breaking change bumps the minor.
 
+## [0.4.0] - 2026-07-08
+
+### Added
+
+- `verify-certificate` now carries and adjudicates the certificate's
+  `agenticPostureBinding` (OAP spec 210). The binding is round-tripped through the
+  typed certificate struct so the self-hash and Ed25519 signature stay intact,
+  then adjudicated three ways: internal consistency (a `governed` posture must
+  declare surfaces; a `none` posture must not), a cross-check of a declared `none`
+  against the produced-app SBOM under `--sbom-dir` (an agentic-SDK dependency
+  contradicts the declaration), and a top-level governance-envelope shape check
+  (spec 210 FR-004). (#12, spec 001)
+- The agentic-SDK watchlist is ecosystem-scoped, so an npm `openai` is not matched
+  against a `pkg:pypi/openai` coordinate, and the purl match anchors on the
+  package-name segment rather than a bare substring; the SBOM cross-check is
+  skipped when internal consistency already failed, so an unknown posture no longer
+  emits a contradictory notice. (#13, spec 001)
+
 ## [0.3.0] - 2026-07-03
 
 ### Breaking
@@ -58,6 +76,7 @@ is below 1.0, a breaking change bumps the minor.
   Prebuilt-binary distribution via npm and PyPI; the repository dogfoods
   spec-spine governance over its own `specs/` corpus.
 
+[0.4.0]: https://github.com/stagecraft-ing/tenant-tail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/stagecraft-ing/tenant-tail/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/stagecraft-ing/tenant-tail/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/stagecraft-ing/tenant-tail/releases/tag/v0.1.0
