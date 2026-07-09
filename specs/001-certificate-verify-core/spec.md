@@ -112,12 +112,18 @@ relicensed Apache-2.0.
   `none` must enumerate no surfaces; `declared`/`governed` must enumerate at least
   one; a `governed` surface must carry a `governance_envelope` that shape-validates
   as a spec-198 envelope (FR-004); an unknown posture is an error. A validly-signed
-  but self-inconsistent binding is rejected.
+  but self-inconsistent binding is rejected. When (a) finds an inconsistency (e.g.
+  an unknown posture string), the cross-check (b) is skipped: its outcome would
+  otherwise fold a non-`none` posture into a reassuring notice that contradicts the
+  error on the same binding.
   (b) SBOM CROSS-CHECK (`--sbom-dir`, `adjudicate_agentic_posture`): only a `none`
   posture (authored OR defaulted) is falsifiable this way. A `none` whose CycloneDX
   BOM carries a watchlisted agent/LLM SDK dependency is CONTRADICTED (an error
   naming the package); `declared`/`governed` acknowledge agency and never fail on a
-  match. A watchlist MISS is a stated-residual notice, never a silent pass; a
+  match. The watchlist is ecosystem-scoped: a purl match requires the BOM
+  component's purl `<type>` to equal the entry's `ecosystem`, so an npm `openai`
+  entry never matches a `pkg:pypi/openai` on a mixed-language BOM. A watchlist MISS
+  is a stated-residual notice, never a silent pass; a
   missing `--sbom-dir` is a `present-but-unverified` notice (the posture is already
   bound + internally consistency-checked; the BOM is optional falsifiability
   evidence). The field is additive and optional, so an unbound certificate
