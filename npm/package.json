@@ -1,6 +1,6 @@
 {
   "name": "tenant-tail",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "The tenant-tail CLI: a verify-only toolkit that re-checks a factory's run-side paperwork (governance certificate, provenance) with no trust in the producer. Ships the prebuilt binary; no Rust toolchain required.",
   "keywords": [
     "governance",
@@ -42,11 +42,11 @@
     "smoke": "scripts/smoke-test.sh"
   },
   "optionalDependencies": {
-    "@tenant-tail/cli-darwin-arm64": "0.3.0",
-    "@tenant-tail/cli-darwin-x64": "0.3.0",
-    "@tenant-tail/cli-linux-x64": "0.3.0",
-    "@tenant-tail/cli-linux-arm64": "0.3.0",
-    "@tenant-tail/cli-win32-x64": "0.3.0"
+    "@tenant-tail/cli-darwin-arm64": "0.4.0",
+    "@tenant-tail/cli-darwin-x64": "0.4.0",
+    "@tenant-tail/cli-linux-x64": "0.4.0",
+    "@tenant-tail/cli-linux-arm64": "0.4.0",
+    "@tenant-tail/cli-win32-x64": "0.4.0"
   },
   "tenant-tail": {
     "spec": "003-distribution"
