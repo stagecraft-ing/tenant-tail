@@ -178,7 +178,7 @@ pub struct GovernanceCertificate {
     pub signing_attestation: SigningAttestation,
 
     /// Spec 198 FR-014 -- the platform countersign applied on sync-back,
-    /// after stagecraft verified the engine's chain against the run-grant
+    /// after statecraft verified the engine's chain against the run-grant
     /// sequence it issued. EXCLUDED from `certificate_hash` and
     /// `cert_signature` (zeroed before canonicalisation) so sealing never
     /// invalidates the offline chain. `None` = verifiable-but-unsealed --

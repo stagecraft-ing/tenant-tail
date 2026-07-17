@@ -1,6 +1,6 @@
 //! Spec 198 FR-014 -- verification of platform-issued compact JWS.
 //!
-//! Rust twin of stagecraft's `api/factory/signing-pure.ts`. Stagecraft is
+//! Rust twin of statecraft's `api/factory/signing-pure.ts`. Statecraft is
 //! the signing authority (Ed25519, JWKS-published public keys with `kid`
 //! rotation); the OPC engine and `verify-certificate` are verifiers only --
 //! OPC and every agent are keyless, categorically (ASI10 m6). Three
@@ -226,7 +226,7 @@ mod tests {
         ));
     }
 
-    /// Cross-language fixture: a JWS produced by stagecraft's
+    /// Cross-language fixture: a JWS produced by statecraft's
     /// `signing-pure.ts` against a fixed key must verify here. The fixture
     /// below was generated with Node (`crypto.generateKeyPairSync` seeded
     /// key material is not exportable deterministically, so the fixture

@@ -8,10 +8,10 @@ const config: Config = {
   favicon: 'img/favicon.ico',
 
   // GitHub Pages deployment config
-  url: 'https://stagecraft-ing.github.io',
+  url: 'https://statecrafting.github.io',
   baseUrl: '/tenant-tail/',
   // For a custom domain later: set baseUrl: '/' and add static/CNAME.
-  organizationName: 'stagecraft-ing',
+  organizationName: 'statecrafting',
   projectName: 'tenant-tail',
 
   onBrokenLinks: 'throw',
@@ -35,7 +35,7 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           editUrl:
-            'https://github.com/stagecraft-ing/tenant-tail/tree/main/website/',
+            'https://github.com/statecrafting/tenant-tail/tree/main/website/',
         },
         blog: false,
         theme: {
@@ -56,7 +56,7 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/stagecraft-ing/tenant-tail',
+          href: 'https://github.com/statecrafting/tenant-tail',
           label: 'GitHub',
           position: 'right',
         },
@@ -83,7 +83,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/stagecraft-ing/tenant-tail',
+              href: 'https://github.com/statecrafting/tenant-tail',
             },
           ],
         },

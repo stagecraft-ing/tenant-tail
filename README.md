@@ -1,4 +1,4 @@
-# [tenant-tail](https://stagecraft-ing.github.io/tenant-tail/) [![CI](https://github.com/stagecraft-ing/tenant-tail/actions/workflows/ci.yml/badge.svg)](https://github.com/stagecraft-ing/tenant-tail/actions/workflows/ci.yml)
+# [tenant-tail](https://statecrafting.github.io/tenant-tail/) [![CI](https://github.com/statecrafting/tenant-tail/actions/workflows/ci.yml/badge.svg)](https://github.com/statecrafting/tenant-tail/actions/workflows/ci.yml)
 ![Tenant Tail Verification Surface](.github/img/tenant-tail-github-banner.jpg)
 
 **The vended tenant verification surface. Spine to tail: spec-spine compiles the
