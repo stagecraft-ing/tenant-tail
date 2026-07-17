@@ -76,7 +76,7 @@ is below 1.0, a breaking change bumps the minor.
   Prebuilt-binary distribution via npm and PyPI; the repository dogfoods
   spec-spine governance over its own `specs/` corpus.
 
-[0.4.0]: https://github.com/stagecraft-ing/tenant-tail/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/stagecraft-ing/tenant-tail/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/stagecraft-ing/tenant-tail/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/stagecraft-ing/tenant-tail/releases/tag/v0.1.0
+[0.4.0]: https://github.com/statecrafting/tenant-tail/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/statecrafting/tenant-tail/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/statecrafting/tenant-tail/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/statecrafting/tenant-tail/releases/tag/v0.1.0

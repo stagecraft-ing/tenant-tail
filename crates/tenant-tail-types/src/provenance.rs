@@ -12,7 +12,7 @@
 //! downstream Stage-4/5 hand-fixes.
 //!
 //! The reserved TS mirror lives at
-//! `platform/services/stagecraft/api/governance/provenancePolicy.ts`. When
+//! `platform/services/statecraft/api/governance/provenancePolicy.ts`. When
 //! that file lands, `tools/oap/schema-parity-check` will compare its fingerprint
 //! against `provenance_schema_fingerprint()`. Until then, the parity check
 //! records the Rust-side fingerprint to `build/schema-parity/` so the
@@ -571,7 +571,7 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
     // The OAP-side fingerprint-to-disk test (feeding `tools/oap/schema-parity-check`
-    // against the stagecraft TS mirror) is dropped in tenant-tail: there is no TS
+    // against the statecraft TS mirror) is dropped in tenant-tail: there is no TS
     // mirror here, and a test that writes into the committed tree as a side effect
     // is undesirable. The pure fingerprint + drift tests are kept.
 
